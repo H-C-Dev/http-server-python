@@ -34,7 +34,6 @@ class CustomRequest:
         self.socket = socket
         self.bufsize = bufsize
         self.encoding = encoding
-        # self.val = None
 
     def __receiveHeaderLine(self):
         # empty byte
@@ -72,6 +71,7 @@ class CustomRequest:
         return body
     
     def __extractPathAndQuery(self, rawPath):
+        # if there is a "?", parse the query
         if "?" in rawPath:
             path, qs = rawPath.split("?", 1)
             query = parse_qs(qs, keep_blank_values=True)
@@ -82,7 +82,7 @@ class CustomRequest:
             return (path, query)
 
     
-    def parseRequest(self) -> any: 
+    def parseRequest(self) -> any:
         lines, body = self.__receiveHeaderLine()
         # http method, path and http version in the requestLine
         method, path, version = self.__extracrtRequestLine(lines)
@@ -99,18 +99,49 @@ class CustomRequest:
             "headers": headers
         }
 
-class CustomResponse:
-    def __init__(self, message: str, encoding: str = 'utf-8'):
-        self.val = (
-            "HTTP/1.1 200 OK\r\n"
-            f"Content-Type: text/plain; charset={encoding}\r\n"
-            f"Content-Length: {len(message)}\r\n"
-            "\r\n"
-            f"{message}"
-        )
+
+httpStatusCode = {
+    200: "OK",
+    404: "Not Found"
+}
+
+contentType = {
+    "application/json":"application/json",
+    "text/plain":"text/plain"
     
-    def encode(self, encoding: str = 'utf-8'):
-        return self.val.encode(encoding)
+    }
+
+
+class CustomResponse:
+    def __init__(self, message: str, contentType, statusCode, encoding: str = 'utf-8'):
+        self.statusCode = statusCode
+        self.encoding = encoding
+        self.contentType = contentType
+        self.message = message
+        self.statusLine = None
+        self.header = None
+        self.body = None
+        self.val = None
+
+    def constructResponse(self) -> bytes:
+        if self.statusCode in httpStatusCode:
+            self.statusLine = f"HTTP/1.1 {self.statusCode} {httpStatusCode[self.statusCode]}\r\n"
+            response = (
+                f"{self.statusLine}"
+                f"Content-Type: {self.contentType}; charset={self.encoding}\r\n"
+                f"Content-Length: {len(self.message)}\r\n"
+                "\r\n"
+                f"{self.message}"
+            )
+            self.val = response
+            formattedRes = self.__encode()
+            return formattedRes
+        else:
+            raise Exception("Status code not found")
+
+
+    def __encode(self):
+        return self.val.encode(self.encoding)
 
 
 
@@ -119,21 +150,26 @@ class Server:
         self.port = port
         self.host = host
         self.backlog = backlog
+        self.socket = None
     
     def initServer(self):
         s = CustomSocket(self.port, self.backlog, self.host)
         s.createAndBindSocket()
         print(f"Listening on port: {self.port}")
+        self.socket = s
         while True:
             (clientSocket, clientAddress) = s.acceptConnection()
             print(f"Got a connection from {clientAddress}")
             request = CustomRequest(clientSocket)
             print(request.parseRequest())
-            response = CustomResponse("Welcome to my Hango server")
-            clientSocket.sendall(response.encode('utf-8'))
+            response = CustomResponse("Welcome to my Hango server", "text/plain", 200)
+            print(response.constructResponse())
+            clientSocket.sendall(response.constructResponse())
             clientSocket.close()
-    
+        
+        
 
+        
 
 server = Server(8080, "0.0.0.0")
 server.initServer()
