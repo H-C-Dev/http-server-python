@@ -7,21 +7,21 @@ class CustomSocket:
         self.host = host
         self.port = port
         self.backlog = backlog
-        self.socket = None
+        self.val = None
 
     def __createSocket(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.socket = s
+        self.val = s
         print(f"A socket has been created, will now try to bind it to {self.host} with port: {self.port}")
 
     def __bindPort(self):
-        self.socket.bind((self.host, self.port))
+        self.val.bind((self.host, self.port))
 
     def __listenPort(self):
-        self.socket.listen(self.backlog)
+        self.val.listen(self.backlog)
 
     def acceptConnection(self):
-        (clientSocket, clientAddress) = self.socket.accept()
+        (clientSocket, clientAddress) = self.val.accept()
         return (clientSocket, clientAddress)
     
     def createAndBindSocket(self):
@@ -30,16 +30,15 @@ class CustomSocket:
         self.__listenPort()
 
 class CustomRequest:
-    def __init__(self, socket: socket.socket, bufsize: int = 4096, encoding: str = 'utf-8'):
-        self.socket = socket
+    def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
         self.encoding = encoding
 
-    def __receiveHeaderLine(self):
+    def __receiveHeaderLine(self, clientSocket: socket.socket):
         # empty byte
         data = b""
         while b"\r\n\r\n" not in data:
-            chunk = self.socket.recv(self.bufsize)
+            chunk = clientSocket.recv(self.bufsize)
             # if we no longer receive any chunk, also end the loop
             if not chunk:
                 break
@@ -63,11 +62,11 @@ class CustomRequest:
 
         return headers
     
-    def __extractBody(self, body, headers):
+    def __extractBody(self, body, headers, clientSocket: socket.socket):
         contentLength = int(headers.get("content-length", "0"))
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < contentLength:
-            body += self.socket.recv(self.bufsize)
+            body += clientSocket.recv(self.bufsize)
         return body
     
     def __extractPathAndQuery(self, rawPath):
@@ -82,12 +81,12 @@ class CustomRequest:
             return (path, query)
 
     
-    def parseRequest(self) -> any:
-        lines, body = self.__receiveHeaderLine()
+    def parseRequest(self, clientSocket: socket.socket) -> any:
+        lines, body = self.__receiveHeaderLine(clientSocket)
         # http method, path and http version in the requestLine
         method, path, version = self.__extracrtRequestLine(lines)
         headers = self.__parseHeaders(lines)
-        body = self.__extractBody(body, headers)
+        body = self.__extractBody(body, headers, clientSocket)
         path, query = self.__extractPathAndQuery(path)
 
         return {
@@ -119,8 +118,6 @@ class CustomResponse:
         self.contentType = contentType
         self.message = message
         self.statusLine = None
-        self.header = None
-        self.body = None
         self.val = None
 
     def constructResponse(self) -> bytes:
@@ -150,18 +147,16 @@ class Server:
         self.port = port
         self.host = host
         self.backlog = backlog
-        self.socket = None
     
     def initServer(self):
-        s = CustomSocket(self.port, self.backlog, self.host)
-        s.createAndBindSocket()
+        socket = CustomSocket(self.port, self.backlog, self.host)
+        socket.createAndBindSocket()
         print(f"Listening on port: {self.port}")
-        self.socket = s
         while True:
-            (clientSocket, clientAddress) = s.acceptConnection()
+            (clientSocket, clientAddress) = socket.acceptConnection()
             print(f"Got a connection from {clientAddress}")
-            request = CustomRequest(clientSocket)
-            print(request.parseRequest())
+            request = CustomRequest()
+            print(request.parseRequest(clientSocket))
             response = CustomResponse("Welcome to my Hango server", "text/plain", 200)
             print(response.constructResponse())
             clientSocket.sendall(response.constructResponse())
