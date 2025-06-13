@@ -15,14 +15,14 @@ class CustomSocket:
     def __bind_port(self):
         self.val.bind((self.host, self.port))
 
-    def __listenPort(self):
+    def __listen_port(self):
         self.val.listen(self.backlog)
 
     def accept_connection(self):
-        (clientSocket, clientAddress) = self.val.accept()
-        return (clientSocket, clientAddress)
+        (client_socket, client_address) = self.val.accept()
+        return (client_socket, client_address)
     
     def create_and_bind_socket(self):
         self.__create_socket()
         self.__bind_port()
-        self.__listenPort()
+        self.__listen_port()

@@ -6,11 +6,11 @@ class CustomRequest:
         self.bufsize = bufsize
         self.encoding = encoding
 
-    def __receive_header_line(self, clientSocket: socket.socket):
+    def __receive_header_line(self, client_socket: socket.socket):
         # empty byte
         data = b""
         while b"\r\n\r\n" not in data:
-            chunk = clientSocket.recv(self.bufsize)
+            chunk = client_socket.recv(self.bufsize)
             # if we no longer receive any chunk, also end the loop
             if not chunk:
                 break
@@ -34,11 +34,11 @@ class CustomRequest:
 
         return headers
     
-    def __extract_body(self, body, headers, clientSocket: socket.socket):
+    def __extract_body(self, body, headers, client_socket: socket.socket):
         contentLength = int(headers.get("content-length", "0"))
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < contentLength:
-            body += clientSocket.recv(self.bufsize)
+            body += client_socket.recv(self.bufsize)
         return body
     
     def __extract_path_and_query(self, rawPath):
@@ -53,12 +53,12 @@ class CustomRequest:
             return (path, query)
 
     
-    def parse_request(self, clientSocket: socket.socket) -> any:
-        lines, body = self.__receive_header_line(clientSocket)
+    def parse_request(self, client_socket: socket.socket) -> any:
+        lines, body = self.__receive_header_line(client_socket)
         # http method, path and http version in the requestLine
         method, path, version = self.__extracrt_request_line(lines)
         headers = self.__parse_headers(lines)
-        body = self.__extract_body(body, headers, clientSocket)
+        body = self.__extract_body(body, headers, client_socket)
         path, query = self.__extract_path_and_query(path)
 
         return {
