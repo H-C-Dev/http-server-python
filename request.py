@@ -5,18 +5,6 @@ class CustomRequest:
     def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
         self.encoding = encoding
-        
-    def __split_header_text(self, header_text: str) -> str:
-        lines = header_text.split("\r\n")
-        return lines
-    
-    def __decode_header(self, header: bytes) -> str:
-        header_text = header.decode(self.encoding, errors="ignore")
-        return header_text
-    
-    def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
-        header, space, body = data.partition(b"\r\n\r\n")
-        return (header, body)
 
     def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
         # empty byte
@@ -28,15 +16,26 @@ class CustomRequest:
                 break
             data += chunk
         return data
+        
+    def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
+        header, space, body = data.partition(b"\r\n\r\n")
+        return (header, body)
     
-    def __extract_request_lines_and_body(self, client_socket: socket.socket) -> tuple[bytes, str]:
+    def __decode_header(self, header: bytes) -> str:
+        header_text = header.decode(self.encoding, errors="ignore")
+        return header_text
+    
+    def __split_header_text(self, header_text: str) -> list[str]:
+        lines = header_text.split("\r\n")
+        return lines
+
+    def __extract_request_lines_and_body(self, client_socket: socket.socket) -> tuple[bytes, list[str]]:
         data = self.__receive_byte_data(client_socket)
         header, body = self.__separate_lines_and_body(data)
         header_text = self.__decode_header(header)
         lines = self.__split_header_text(header_text)
         return (body, lines)
     
-
     def __extract_request_line(self, lines):
         return lines[0].split(" ")
     
@@ -68,7 +67,6 @@ class CustomRequest:
             query = {}
             return (path, query)
 
-    
     def parse_request(self, client_socket: socket.socket) -> any:
         body, lines = self.__extract_request_lines_and_body(client_socket)
         # http method, path and http version in the requestLine
