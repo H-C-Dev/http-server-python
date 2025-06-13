@@ -5,8 +5,20 @@ class CustomRequest:
     def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
         self.encoding = encoding
+        
+    def __split_header_text(self, header_text: str) -> str:
+        lines = header_text.split("\r\n")
+        return lines
+    
+    def __decode_header(self, header: bytes) -> str:
+        header_text = header.decode(self.encoding, errors="ignore")
+        return header_text
+    
+    def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
+        header, space, body = data.partition(b"\r\n\r\n")
+        return (header, body)
 
-    def __receive_header_line(self, client_socket: socket.socket):
+    def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
         # empty byte
         data = b""
         while b"\r\n\r\n" not in data:
@@ -15,13 +27,17 @@ class CustomRequest:
             if not chunk:
                 break
             data += chunk
-        
-        header, space, body = data.partition(b"\r\n\r\n")
-        headerText = header.decode(self.encoding, errors="ignore")
-        lines = headerText.split("\r\n")
-        return (lines, body)
+        return data
     
-    def __extracrt_request_line(self, lines):
+    def __extract_request_lines_and_body(self, client_socket: socket.socket) -> tuple[bytes, str]:
+        data = self.__receive_byte_data(client_socket)
+        header, body = self.__separate_lines_and_body(data)
+        header_text = self.__decode_header(header)
+        lines = self.__split_header_text(header_text)
+        return (body, lines)
+    
+
+    def __extract_request_line(self, lines):
         return lines[0].split(" ")
     
     def __parse_headers(self, lines):
@@ -54,9 +70,9 @@ class CustomRequest:
 
     
     def parse_request(self, client_socket: socket.socket) -> any:
-        lines, body = self.__receive_header_line(client_socket)
+        body, lines = self.__extract_request_lines_and_body(client_socket)
         # http method, path and http version in the requestLine
-        method, path, version = self.__extracrt_request_line(lines)
+        method, path, version = self.__extract_request_line(lines)
         headers = self.__parse_headers(lines)
         body = self.__extract_body(body, headers, client_socket)
         path, query = self.__extract_path_and_query(path)
