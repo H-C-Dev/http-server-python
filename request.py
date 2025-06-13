@@ -50,20 +50,20 @@ class CustomRequest:
         return headers
     
     def __extract_body(self, body, headers, client_socket: socket.socket):
-        contentLength = int(headers.get("content-length", "0"))
+        content_length = int(headers.get("content-length", "0"))
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
-        while len(body) < contentLength:
+        while len(body) < content_length:
             body += client_socket.recv(self.bufsize)
         return body
     
-    def __extract_path_and_query(self, rawPath):
+    def __extract_path_and_query(self, raw_path):
         # if there is a "?", parse the query
-        if "?" in rawPath:
-            path, qs = rawPath.split("?", 1)
+        if "?" in raw_path:
+            path, qs = raw_path.split("?", 1)
             query = parse_qs(qs, keep_blank_values=True)
             return (path, query)
         else:
-            path = rawPath
+            path = raw_path
             query = {}
             return (path, query)
 
