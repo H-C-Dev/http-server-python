@@ -8,6 +8,10 @@ http_status_codes_message = {
     500: "Internal Server Error"
 }
 
+class MethodType(Enum):
+    GET = "GET"
+    POST = "POST"
+
 class ContentType(Enum):
     JSON = "application/json"
     PLAIN = "text/plain"
