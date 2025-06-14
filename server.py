@@ -99,7 +99,6 @@ class Server(HTTPServer):
         handler, parameters = self.router.match_handler(MethodType.POST.value, path)
         request_body = self.__extract_POST_request_body(request)
         response = self.__invoke_handler(handler, request_body)
-        print(response, "response from handler")
         return response
     
     def POST(self, template, handler):

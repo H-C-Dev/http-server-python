@@ -38,7 +38,7 @@ class CustomResponse:
         if self.status_code in http_status_codes_message:
             self.__set_status_line()
             self.__set_header_block()
-
+            
             return self.__encode_and_combine_response()
         else:
             raise Exception("Status code not found")
