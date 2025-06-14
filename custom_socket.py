@@ -10,6 +10,7 @@ class CustomSocket:
     def __create_socket(self):
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.val = s
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         print(f"A socket has been created, will now try to bind it to {self.host} with port: {self.port}")
 
     def __bind_port(self):
