@@ -11,14 +11,13 @@ class CustomResponse:
         self.header_block = None
 
     def __encode_body(self):
+        print("encoding...", self.body)
         if isinstance(self.body, (dict, list)):
             text = json.dumps(self.body)
         else:
             text = str(self.body)
         return text.encode(self.encoding)
-        
-    def __encode_and_combine_response(self):
-        return self.status_line.encode(self.encoding) + self.header_block.encode(self.encoding) + self.__encode_body()
+
     
     def __set_status_line(self):
         self.status_line = f"HTTP/1.1 {self.status_code} {http_status_codes_message[self.status_code]}\r\n"
@@ -31,10 +30,15 @@ class CustomResponse:
                 "\r\n"
             )
     
+    def __encode_and_combine_response(self):
+        return self.status_line.encode(self.encoding) + self.header_block.encode(self.encoding) + self.__encode_body()
+
     def construct_response(self) -> bytes:
+        print(self.status_code, "status")
         if self.status_code in http_status_codes_message:
             self.__set_status_line()
             self.__set_header_block()
+
             return self.__encode_and_combine_response()
         else:
             raise Exception("Status code not found")

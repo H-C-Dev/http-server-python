@@ -88,8 +88,8 @@ class Server(HTTPServer):
         
     def __handle_GET_request(self, path):
         handler, parameters = self.router.match_handler(MethodType.GET.value, path)
-        response_body = self.__invoke_handler(handler, parameters)
-        return CustomResponse(body=response_body, status_code=200)
+        response = self.__invoke_handler(handler, parameters)
+        return response
     
     def __extract_POST_request_body(self, request):
         body = request['body'].decode(request.get('encoding', 'utf-8'))
@@ -98,9 +98,9 @@ class Server(HTTPServer):
     def __handle_POST_request(self, path, request):
         handler, parameters = self.router.match_handler(MethodType.POST.value, path)
         request_body = self.__extract_POST_request_body(request)
-        body = self.__invoke_handler(handler, request_body)
-        print("value returned to client: ", body)
-        return CustomResponse(f"POST: {body}", ContentType.PLAIN.value, 200)
+        response = self.__invoke_handler(handler, request_body)
+        print(response, "response from handler")
+        return response
     
     def POST(self, template, handler):
         self.router.add_route(template, handler, MethodType.POST.value)
