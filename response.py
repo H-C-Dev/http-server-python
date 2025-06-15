@@ -11,7 +11,6 @@ class CustomResponse:
         self.header_block = None
 
     def __encode_body(self):
-        print("encoding...", self.body)
         if isinstance(self.body, (dict, list)):
             text = json.dumps(self.body)
         else:
@@ -34,7 +33,6 @@ class CustomResponse:
         return self.status_line.encode(self.encoding) + self.header_block.encode(self.encoding) + self.__encode_body()
 
     def construct_response(self) -> bytes:
-        print(self.status_code, "status")
         if self.status_code in http_status_codes_message:
             self.__set_status_line()
             self.__set_header_block()
