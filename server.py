@@ -56,14 +56,10 @@ class Server(HTTPServer):
         super().__init__(host, port, backlog)
         self.router = RouteToHandler()
 
-    def __invoke_handler(self, handler, parameter):
+    def __invoke_handler(self, handler, parameter) -> CustomResponse:
         try:
-            if parameter and len(parameter) != 0:
-                response = handler(parameter)
-                return response
-            else:
-                response = handler()
-                return response
+            response = handler(parameter) if parameter else handler()
+            return response
         except Exception as e:
             print(f"Error: {e}")
             raise BadRequest(f"{parameter} - Bad Request")
