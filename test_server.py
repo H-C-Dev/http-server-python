@@ -1,6 +1,8 @@
 import pytest
 from server import HTTPServer, Server
 from response import CustomResponse
+from custom_socket import CustomSocket
+from constants import ContentType, http_status_codes_message
 
 @pytest.fixture
 def server():
@@ -9,6 +11,10 @@ def server():
 @pytest.fixture
 def http_server():
     return HTTPServer("0.0.0.0", 8080)
+
+@pytest.fixture
+def socket():
+    return CustomSocket()
 
 def test__invoke_handler(server):
     mock_value = "testing..."
@@ -26,8 +32,6 @@ def test__invoke_handler(server):
     assert actual_response.header_block == expected_response.header_block
 
 
-
-
 def test__extract_raw_path_and_method(server):
     method = "POST"
     path = "/test"
@@ -40,6 +44,28 @@ def test__extract_raw_path_and_method(server):
     assert actual_method == expected_method
     assert actual_path == expected_path
 
+
+def test_handle_request(mocker, server):
+    mock_request = {
+        "method" : "GET",
+        "path" : "/test",
+        "version" : "HTTP/1.1",
+        "query" : {},
+        "body" : b"",
+        "headers" : {}
+        }
+    
+    mocker.patch.object(server, "_Server__extract_raw_path_and_method", return_value=("GET", "/test"))
+    expected = CustomResponse(b"testing", 200, ContentType.PLAIN.value)
+    mocker.patch.object(server, "_Server__handle_GET_request", return_value=expected)
+
+    actual = server.handle_request(mock_request)
+    assert isinstance(actual, CustomResponse)
+    assert actual.status_code == expected.status_code
+    assert actual.content_type == expected.content_type
+    assert actual.body == expected.body
+    # __hanndle_POST_request
+    # raise MethodNotAllowed
 
 def test__enter_accept_state_one_iteration(mocker, http_server):
     mock_socket = mocker.Mock()
