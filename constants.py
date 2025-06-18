@@ -5,7 +5,8 @@ http_status_codes_message = {
     400: "Bad Request", 
     404: "Not Found",
     405: "Method Not Allowed", 
-    500: "Internal Server Error"
+    500: "Internal Server Error",
+    505: "HTTP Version Not Supported"
 }
 
 class MethodType(Enum):
