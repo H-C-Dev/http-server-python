@@ -75,7 +75,7 @@ class CustomRequest:
         body = self.__extract_body(body, headers, client_socket)
         path, query = self.__extract_path_and_query(path)
 
-        return {
+        req = {
             "method": method,
             "path": unquote_plus(path),
             "version": version,
@@ -83,3 +83,5 @@ class CustomRequest:
             "body": body,
             "headers": headers
         }
+
+        return req
