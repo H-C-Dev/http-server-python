@@ -2,7 +2,7 @@ from constants import http_status_codes_message, ContentType
 import json
 
 class CustomResponse:
-    def __init__(self, body: str, status_code: str, content_type: str = ContentType.PLAIN.value, encoding: str = 'utf-8'):
+    def __init__(self, body: bytes | str | dict | list, status_code: str, content_type: str = ContentType.PLAIN.value, encoding: str = 'utf-8'):
         self.status_code = status_code
         self.encoding = encoding
         self.content_type = content_type
@@ -13,9 +13,10 @@ class CustomResponse:
     def __encode_body(self):
         if isinstance(self.body, (dict, list)):
             text = json.dumps(self.body)
-        else:
-            text = str(self.body)
-        return text.encode(self.encoding)
+            return text.encode(self.encoding)
+        if isinstance(self.body, bytes):
+            return self.body
+        return str(self.body).encode(self.encoding)
 
     
     def __set_status_line(self):
