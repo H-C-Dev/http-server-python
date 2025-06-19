@@ -97,15 +97,19 @@ class Server(HTTPServer):
         response = self.__invoke_handler(handler, request_body)
         return response
     
-    def POST(self, template, handler):
-        self.router.add_route(template, handler, MethodType.POST.value)
+    def GET(self, template: str):
+        def decorator(func):
+            self.router.add_route(template, func, MethodType.GET.value)
+            return func
+        return decorator
 
-    def GET(self, template, handler):
-        self.router.add_route(template, handler, MethodType.GET.value)
-
+    def POST(self, template: str):
+        def decorator(func):
+            self.router.add_route(template, func, MethodType.POST.value)
+            return func
+        return decorator
     
 
 
-        
-
-
+    
+server = Server("0.0.0.0", PORT)
