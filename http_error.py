@@ -32,3 +32,7 @@ class InternalServerError(HTTPError):
     def __init__(self, message: str = "Internal Server Error"):
         super().__init__(500, message)
 
+class HTTPVersionNotSupported(HTTPError):
+    def __init__(self, message: str = "HTTP Version Not Supported"):
+        super().__init__(505, message)
+        

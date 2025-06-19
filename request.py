@@ -6,22 +6,37 @@ class CustomRequest:
         self.bufsize = bufsize
         self.encoding = encoding
 
-    def __receive_header_line(self, clientSocket: socket.socket):
+    def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
         # empty byte
         data = b""
         while b"\r\n\r\n" not in data:
-            chunk = clientSocket.recv(self.bufsize)
+            chunk = client_socket.recv(self.bufsize)
             # if we no longer receive any chunk, also end the loop
             if not chunk:
                 break
             data += chunk
+        return data
         
+    def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
         header, space, body = data.partition(b"\r\n\r\n")
-        headerText = header.decode(self.encoding, errors="ignore")
-        lines = headerText.split("\r\n")
-        return (lines, body)
+        return (header, body)
     
-    def __extracrt_request_line(self, lines):
+    def __decode_header(self, header: bytes) -> str:
+        header_text = header.decode(self.encoding, errors="ignore")
+        return header_text
+    
+    def __split_header_text(self, header_text: str) -> list[str]:
+        lines = header_text.split("\r\n")
+        return lines
+
+    def __extract_request_lines_and_body(self, client_socket: socket.socket) -> tuple[bytes, list[str]]:
+        data = self.__receive_byte_data(client_socket)
+        header, body = self.__separate_lines_and_body(data)
+        header_text = self.__decode_header(header)
+        lines = self.__split_header_text(header_text)
+        return (body, lines)
+    
+    def __extract_request_line(self, lines):
         return lines[0].split(" ")
     
     def __parse_headers(self, lines):
@@ -34,34 +49,33 @@ class CustomRequest:
 
         return headers
     
-    def __extract_body(self, body, headers, clientSocket: socket.socket):
-        contentLength = int(headers.get("content-length", "0"))
+    def __extract_body(self, body, headers, client_socket: socket.socket):
+        content_length = int(headers.get("content-length", "0"))
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
-        while len(body) < contentLength:
-            body += clientSocket.recv(self.bufsize)
+        while len(body) < content_length:
+            body += client_socket.recv(self.bufsize)
         return body
     
-    def __extract_path_and_query(self, rawPath):
+    def __extract_path_and_query(self, raw_path):
         # if there is a "?", parse the query
-        if "?" in rawPath:
-            path, qs = rawPath.split("?", 1)
+        if "?" in raw_path:
+            path, qs = raw_path.split("?", 1)
             query = parse_qs(qs, keep_blank_values=True)
             return (path, query)
         else:
-            path = rawPath
+            path = raw_path
             query = {}
             return (path, query)
 
-    
-    def parse_request(self, clientSocket: socket.socket) -> any:
-        lines, body = self.__receive_header_line(clientSocket)
+    def parse_request(self, client_socket: socket.socket) -> any:
+        body, lines = self.__extract_request_lines_and_body(client_socket)
         # http method, path and http version in the requestLine
-        method, path, version = self.__extracrt_request_line(lines)
+        method, path, version = self.__extract_request_line(lines)
         headers = self.__parse_headers(lines)
-        body = self.__extract_body(body, headers, clientSocket)
+        body = self.__extract_body(body, headers, client_socket)
         path, query = self.__extract_path_and_query(path)
 
-        return {
+        req = {
             "method": method,
             "path": unquote_plus(path),
             "version": version,
@@ -69,3 +83,5 @@ class CustomRequest:
             "body": body,
             "headers": headers
         }
+
+        return req

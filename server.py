@@ -1,9 +1,9 @@
 from custom_socket import CustomSocket
-from http_error import HTTPError, MethodNotAllowed, InternalServerError
-from constants import ContentType
+from http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
+from constants import ContentType, MethodType
 from request import CustomRequest
 from response import CustomResponse
-
+from route import RouteToHandler
 PORT=8080
 
 class HTTPServer:
@@ -46,30 +46,70 @@ class HTTPServer:
     def handle_error(self, http_error):
         return CustomResponse(
             http_error.message,
-            ContentType.PLAIN,
+            ContentType.PLAIN.value,
             http_error.status_code
         )
 
 class Server(HTTPServer):
+
+    def __init__(self, host, port, backlog=5):
+        super().__init__(host, port, backlog)
+        self.router = RouteToHandler()
+
+    def __invoke_handler(self, handler, parameter) -> CustomResponse:
+        try:
+            response = handler(parameter) if parameter else handler()
+            return response
+        except Exception as e:
+            print(f"Error: {e}")
+            raise BadRequest(f"{parameter} - Bad Request")
+
     def parse_request(self, client_socket):
         return CustomRequest().parse_request(client_socket)
     
-    def handle_request(self, request):
+    def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
         method, path = request['method'], request['path']
-        if method == 'GET':
-            body = f"GET {path}"
-            return CustomResponse(body, ContentType.PLAIN, 200)
-        
-        elif method == 'POST':
-            body = request['body'].decode(request.get('encoding', 'utf-8'))
-            return CustomResponse(f"POST: {body}", ContentType.PLAIN, 200)
-        
+        return (method, path)
+    
+    def handle_request(self, request) -> CustomResponse:
+        (method, path) = self.__extract_raw_path_and_method(request)
+        if method == MethodType.GET.value:
+            response = self.__handle_GET_request(path)
+            return response
+        elif method == MethodType.POST.value:
+            response = self.__handle_POST_request(path, request)
+            return response
         else:
             raise MethodNotAllowed(f"{method} - Method Not Allowed")
+        
+    def __handle_GET_request(self, path):
+        handler, parameters = self.router.match_handler(MethodType.GET.value, path)
+        response = self.__invoke_handler(handler, parameters)
+        return response
+    
+    def __extract_POST_request_body(self, request):
+        body = request['body'].decode(request.get('encoding', 'utf-8'))
+        return body
+    
+    def __handle_POST_request(self, path, request):
+        handler, parameters = self.router.match_handler(MethodType.POST.value, path)
+        request_body = self.__extract_POST_request_body(request)
+        response = self.__invoke_handler(handler, request_body)
+        return response
+    
+    def GET(self, template: str):
+        def decorator(func):
+            self.router.add_route(template, func, MethodType.GET.value)
+            return func
+        return decorator
+
+    def POST(self, template: str):
+        def decorator(func):
+            self.router.add_route(template, func, MethodType.POST.value)
+            return func
+        return decorator
+    
 
 
-def main():
-    server = Server("0.0.0.0", 8080)
-    server.start_server()
-
-main()
+    
+server = Server("0.0.0.0", PORT)
