@@ -64,7 +64,7 @@ class Server(HTTPServer):
             return response
         except Exception as e:
             print(f"Error: {e}")
-            raise BadRequest(f"{parameter} - {http_status_codes_message[400]}")
+            raise BadRequest(f"{parameter}")
 
     def parse_request(self, client_socket):
         return CustomRequest().parse_request(client_socket)
@@ -82,7 +82,7 @@ class Server(HTTPServer):
             response = self.__handle_POST_request(path, request)
             return response
         else:
-            raise MethodNotAllowed(f"{method} - {http_status_codes_message[405]}")
+            raise MethodNotAllowed(f"{method}")
 
         
     def __handle_GET_request(self, path):
