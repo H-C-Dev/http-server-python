@@ -2,7 +2,7 @@ import pytest
 from server import HTTPServer, Server
 from response import CustomResponse
 from custom_socket import CustomSocket
-from constants import ContentType, http_status_codes_message
+from constants import ContentType
 
 @pytest.fixture
 def server():
