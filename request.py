@@ -6,15 +6,26 @@ class CustomRequest:
         self.bufsize = bufsize
         self.encoding = encoding
 
+    # def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
+    #     # empty byte
+    #     data = b""
+    #     while b"\r\n\r\n" not in data:
+    #         chunk = client_socket.recv(self.bufsize)
+    #         # if we no longer receive any chunk, also end the loop
+    #         if not chunk:
+    #             break
+    #         data += chunk
+    #     return data
+
     def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
         # empty byte
-        data = b""
+        data = bytearray()
         while b"\r\n\r\n" not in data:
             chunk = client_socket.recv(self.bufsize)
             # if we no longer receive any chunk, also end the loop
             if not chunk:
                 break
-            data += chunk
+            data.extend(chunk)
         return data
         
     def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
