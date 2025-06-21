@@ -20,8 +20,8 @@ def test__invoke_handler(server):
     mock_value = "testing..."
 
     def mock_handler(text):
-        return CustomResponse(body=text, status_code=200)
-    expected_response = CustomResponse(body=mock_value, status_code=200)
+        return CustomResponse(body=text, status_code="200")
+    expected_response = CustomResponse(body=mock_value, status_code="200")
     actual_response = server._Server__invoke_handler(mock_handler, mock_value)
 
     assert actual_response.body == expected_response.body
@@ -56,7 +56,7 @@ def test_handle_request(mocker, server):
         }
     
     mocker.patch.object(server, "_Server__extract_raw_path_and_method", return_value=("GET", "/test"))
-    expected = CustomResponse(b"testing", 200, ContentType.PLAIN.value)
+    expected = CustomResponse(b"testing", "200", ContentType.PLAIN.value)
     mocker.patch.object(server, "_Server__handle_GET_request", return_value=expected)
 
     actual = server.handle_request(mock_request)
