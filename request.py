@@ -1,21 +1,11 @@
 import socket
 from urllib.parse import parse_qs, unquote_plus
-
+from http_error import HTTPVersionNotSupported
 class CustomRequest:
     def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
         self.encoding = encoding
 
-    # def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
-    #     # empty byte
-    #     data = b""
-    #     while b"\r\n\r\n" not in data:
-    #         chunk = client_socket.recv(self.bufsize)
-    #         # if we no longer receive any chunk, also end the loop
-    #         if not chunk:
-    #             break
-    #         data += chunk
-    #     return data
 
     def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
         # empty byte
@@ -47,8 +37,14 @@ class CustomRequest:
         lines = self.__split_header_text(header_text)
         return (body, lines)
     
+    def __check_http_version(self, version):
+        if version != "HTTP/1.1":
+            raise HTTPVersionNotSupported()
+
     def __extract_request_line(self, lines):
-        return lines[0].split(" ")
+        method, path, version = lines[0].split(" ")
+        self.__check_http_version(version)
+        return (method, path, version)
     
     def __parse_headers(self, lines):
         headers = dict()
