@@ -1,9 +1,10 @@
 from custom_socket import CustomSocket
 from http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
-from constants import ContentType, MethodType
+from constants import ContentType, MethodType, http_status_codes_message
 from request import CustomRequest
 from response import CustomResponse
 from route import RouteToHandler
+from util import ServeFile
 PORT=8080
 
 class HTTPServer:
@@ -55,6 +56,7 @@ class Server(HTTPServer):
     def __init__(self, host, port, backlog=5):
         super().__init__(host, port, backlog)
         self.router = RouteToHandler()
+        self.serve_file = ServeFile()
 
     def __invoke_handler(self, handler, parameter) -> CustomResponse:
         try:
@@ -62,7 +64,7 @@ class Server(HTTPServer):
             return response
         except Exception as e:
             print(f"Error: {e}")
-            raise BadRequest(f"{parameter} - Bad Request")
+            raise BadRequest(f"{parameter} - {http_status_codes_message[400]}")
 
     def parse_request(self, client_socket):
         return CustomRequest().parse_request(client_socket)
@@ -80,9 +82,13 @@ class Server(HTTPServer):
             response = self.__handle_POST_request(path, request)
             return response
         else:
-            raise MethodNotAllowed(f"{method} - Method Not Allowed")
+            raise MethodNotAllowed(f"{method} - {http_status_codes_message[405]}")
+
         
     def __handle_GET_request(self, path):
+        if self.serve_file.is_static_prefix(path):
+            self.serve_file.serve_static_file(path)
+            
         handler, parameters = self.router.match_handler(MethodType.GET.value, path)
         response = self.__invoke_handler(handler, parameters)
         return response
