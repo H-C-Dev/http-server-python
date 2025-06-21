@@ -1,5 +1,8 @@
 import os
 from config import SERVER_ROOT
+from http_error import NotFound, InternalServerError
+from response import CustomResponse
+from constants import EXTENSION_TO_MIME
 class ExtractParams:
     def __split_slash(self, path: str) -> list[str]:
         path_arr = path.strip("/").split("/")
@@ -29,32 +32,49 @@ class ExtractParams:
         return parameters
 
 class ServeFile:
+
+    def __get_file_content_type(self, path) -> str:
+        i = len(path) - 1
+        while i >= 0:
+            if path[i] == ".":
+                return self.__get_MIME(path[i:])
+            i-= 1
+        raise InternalServerError("Something went wrong while reading the file: {path}")
     
-    def __concat_directory(self, path: str) -> str:
-        file_path = SERVER_ROOT + path
-        print(f"Client is requesting: {file_path}")
-        return file_path
-    
-    def __is_file_present(self, path: str) -> str:
-        concat_directory = self.__concat_directory(path)
-        isFile = os.path.isfile(concat_directory)
-        return isFile
-    
+    def __get_MIME(self, extension) -> str:
+        return EXTENSION_TO_MIME[extension] 
+            
     def is_static_prefix(self, path: str) -> bool:
             if path.startswith("/static/"):
                 return True
             return False
+    
+    def __pick_file(self, concat_path):
+        # mutable byte array
+        file = bytearray()
+        with open(concat_path, "rb") as raw_file:
+            while True:
+                file_chunk = raw_file.read(4096)
+                if not file_chunk:
+                    break
+                # to address the bytes immutable nature, use 'extend' on mutable byte array to prevent byte from creating new byte object to save memory.
+                file.extend(file_chunk)
+        return bytes(file)
+    
+    def __is_file_present(self, path: str) -> str:
+        concat_path = SERVER_ROOT + path
+        is_File = os.path.isfile(concat_path)
+        return (is_File, concat_path)
 
-    def serve_static_file(self, path: str):
-        # check if the file exists
-        if self.__is_file_present(path):
-        # if yes -> return the file
-            print(True)
-            pass
+    def serve_static_file(self, path: str) -> bytes:
+        (is_File, concat_path) = self.__is_file_present(path)
+        if is_File:
+            file_bytes = self.__pick_file(concat_path)
+            content_type = self.__get_file_content_type(path)
+            print(f"Returning file_bytes: {file_bytes}")
+            return CustomResponse(body=file_bytes, status_code=200, content_type=content_type)
         else:
-        # if no -> return 404
-            print(False)
-            pass
+            raise NotFound(f"{path} Not Found")
             
   
 

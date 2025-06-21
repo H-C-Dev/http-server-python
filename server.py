@@ -87,7 +87,8 @@ class Server(HTTPServer):
         
     def __handle_GET_request(self, path):
         if self.serve_file.is_static_prefix(path):
-            self.serve_file.serve_static_file(path)
+            file_response = self.serve_file.serve_static_file(path)
+            return file_response
             
         handler, parameters = self.router.match_handler(MethodType.GET.value, path)
         response = self.__invoke_handler(handler, parameters)
