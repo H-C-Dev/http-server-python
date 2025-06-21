@@ -1,6 +1,6 @@
 from custom_socket import CustomSocket
 from http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
-from constants import ContentType, MethodType, http_status_codes_message
+from constants import ContentType, MethodType
 from request import CustomRequest
 from response import CustomResponse
 from route import RouteToHandler
@@ -30,7 +30,8 @@ class HTTPServer:
                 response = self.handle_error(http_error)
             except Exception as e:    
                 print("Unexpected:", e)
-                response = self.handle_error(InternalServerError)
+                error = InternalServerError()
+                response = self.handle_error(error)
             client_socket.sendall(response.construct_response())
             client_socket.close()
 
@@ -46,9 +47,9 @@ class HTTPServer:
 
     def handle_error(self, http_error):
         return CustomResponse(
-            http_error.message,
-            ContentType.PLAIN.value,
-            http_error.status_code
+            body=http_error.message,
+            content_type=ContentType.PLAIN.value,
+            status_code=str(http_error.status_code)
         )
 
 class Server(HTTPServer):
@@ -83,14 +84,14 @@ class Server(HTTPServer):
             return response
         else:
             raise MethodNotAllowed(f"{method}")
-
+    
         
     def __handle_GET_request(self, path):
         if self.serve_file.is_static_prefix(path):
-            file_response = self.serve_file.serve_static_file(path)
-            return file_response
-            
-        handler, parameters = self.router.match_handler(MethodType.GET.value, path)
+            (file_bytes, content_type) = self.serve_file.serve_static_file(path)
+            return CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
+
+        (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
         response = self.__invoke_handler(handler, parameters)
         return response
     
