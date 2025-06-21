@@ -1,0 +1,1 @@
+print("This is a static py file to be returned.")
