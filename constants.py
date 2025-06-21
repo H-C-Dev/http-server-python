@@ -16,3 +16,11 @@ class MethodType(Enum):
 class ContentType(Enum):
     JSON = "application/json"
     PLAIN = "text/plain"
+
+
+EXTENSION_TO_MIME = {
+    ".html": "text/html",
+    ".json": "application/json",
+    ".png":  "image/png",
+    ".jpg":  "image/jpeg",
+}
