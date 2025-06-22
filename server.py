@@ -1,3 +1,4 @@
+import asyncio
 from custom_socket import CustomSocket
 from http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
 from constants import ContentType, MethodType
@@ -20,7 +21,7 @@ class HTTPServer:
         return server_socket
     
     def __enter_accept_state(self, server_socket: CustomSocket):
-        while True:
+        # while True:
             (client_socket,  client_address) = server_socket.accept_connection()
             print(f"Got request from IP: {client_address}")
             try:
@@ -35,9 +36,10 @@ class HTTPServer:
             client_socket.sendall(response.construct_response())
             client_socket.close()
 
-    def start_server(self):
-        server_socket = self.__create_socket()
-        self.__enter_accept_state(server_socket)
+    async def start_server(self):
+        # server_socket = self.__create_socket()
+        # self.__enter_accept_state(server_socket)
+        server = await asyncio.start_server(self.__enter_accept_state, self.host, self.port)
 
     def parse_request(self, client_socket):
         raise NotImplementedError
