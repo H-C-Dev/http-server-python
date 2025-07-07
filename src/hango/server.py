@@ -1,5 +1,4 @@
 import asyncio
-# from custom_socket import CustomSocket
 from hango.http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
 from hango.constants import ContentType, MethodType
 from hango.request import CustomRequest
