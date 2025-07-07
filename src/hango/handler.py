@@ -1,6 +1,6 @@
-from response   import CustomResponse
-from type_safe  import type_safe
-from server import server
+from hango.response   import CustomResponse
+from hango.type_safe  import type_safe
+from hango import server
 
 @server.GET("/favicon.ico")
 @type_safe

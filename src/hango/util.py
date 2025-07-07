@@ -1,7 +1,7 @@
 import os
-from config import STATIC_ROOT, SERVER_ROOT
-from http_error import NotFound, InternalServerError
-from constants import EXTENSION_TO_MIME
+from hango.config import STATIC_ROOT, SERVER_ROOT
+from hango.http_error import NotFound, InternalServerError
+from hango.constants import EXTENSION_TO_MIME
 import datetime
 
 class ExtractParams:

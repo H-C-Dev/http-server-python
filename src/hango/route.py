@@ -1,5 +1,5 @@
-from http_error import NotFound
-from util import ExtractParams
+from hango.http_error import NotFound
+from hango.util import ExtractParams
 
 class Route:
     def __init__(self, template, handler, method):
