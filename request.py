@@ -54,11 +54,11 @@ class CustomRequest:
 
         return headers
     
-    def __extract_body(self, body, headers, client_socket: socket.socket):
+    async def __extract_body(self, body, headers, reader: asyncio.StreamReader):
         content_length = int(headers.get("content-length", "0"))
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < content_length:
-            body += client_socket.recv(self.bufsize)
+            body += await reader.read(self.bufsize)
         return body
     
     def __extract_path_and_query(self, raw_path):
@@ -77,7 +77,7 @@ class CustomRequest:
         # http method, path and http version in the requestLine
         method, path, version = self.__extract_request_line(lines)
         headers = self.__parse_headers(lines)
-        body = self.__extract_body(body, headers, client_socket)
+        body = await self.__extract_body(body, headers, reader)
         path, query = self.__extract_path_and_query(path)
 
         req = {
