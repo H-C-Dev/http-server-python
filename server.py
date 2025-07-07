@@ -41,13 +41,14 @@ class HTTPServer:
         print(reader)
         request = await self.parse_request(reader)
         print("[REQUEST]: ", request)
-        print(writer)
+        response = self.handle_request(request)
+        print("[RESPONSE]: ", response)
+        writer.write(response)
 
 
     async def init_server(self):
         server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
-        async with server:
-            await server.serve_forever()
+        return server
 
 
     async def parse_request(self, reader: asyncio.StreamReader):
@@ -71,6 +72,7 @@ class Server(HTTPServer):
         self.serve_file = ServeFile()
 
     def __invoke_handler(self, handler, parameter) -> CustomResponse:
+        print("__invoke_handler")
         try:
             response = handler(parameter) if parameter else handler()
             return response
@@ -82,27 +84,35 @@ class Server(HTTPServer):
         return await CustomRequest().parse_request(client_socket)
     
     def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
+        print("__extract_raw_path_and_method")
         method, path = request['method'], request['path']
         return (method, path)
     
     def handle_request(self, request) -> CustomResponse:
+        print("handle_request")
         (method, path) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
             response = self.__handle_GET_request(path)
-            return response
+            
+            return response.construct_response()
         elif method == MethodType.POST.value:
             response = self.__handle_POST_request(path, request)
-            return response
+            
+            return response.construct_response()
         else:
             raise MethodNotAllowed(f"{method}")
     
         
     def __handle_GET_request(self, path):
+        print("__handle_GET_request")
         if self.serve_file.is_static_prefix(path):
             (file_bytes, content_type) = self.serve_file.serve_static_file(path)
             return CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
 
         (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
+        print(handler)
+        print(parameters)
+
         response = self.__invoke_handler(handler, parameters)
         return response
     
