@@ -16,9 +16,17 @@ class HTTPServer:
 
 
     async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        request = await self.parse_request(reader)
-        response = self.handle_request(request)
-        await self.__write_response(response, writer)
+        try:
+            request = await self.parse_request(reader)
+            response = self.handle_request(request)
+            await self.__write_response(response, writer)
+        except HTTPError as http_e:
+            response = self.handle_error_response(http_e)
+            await self.__write_response(response, writer)
+        except Exception as server_e:
+            print(f'Internal Error: {server_e}')
+            response = self.handle_error_response(InternalServerError())
+            await self.__write_response(response, writer)
 
     async def __write_response(self, response: bytes, writer: asyncio.StreamWriter):
         writer.write(response)
@@ -36,12 +44,13 @@ class HTTPServer:
     def handle_request(self, request):
         raise NotImplementedError
 
-    def handle_error(self, http_error):
-        return CustomResponse(
+    def handle_error_response(self, http_error):
+        response = CustomResponse(
             body=http_error.message,
             content_type=ContentType.PLAIN.value,
             status_code=str(http_error.status_code)
         )
+        return response.construct_response()
 
 class Server(HTTPServer):
 
