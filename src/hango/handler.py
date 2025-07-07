@@ -1,6 +1,6 @@
 from hango.response   import CustomResponse
 from hango.type_safe  import type_safe
-from hango import server
+from hango.server import server
 
 @server.GET("/favicon.ico")
 @type_safe
