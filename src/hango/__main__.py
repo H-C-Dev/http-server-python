@@ -1,8 +1,8 @@
 import asyncio
 import signal
 
-from http_server import server
-import handler
+from hango import server
+import hango.handler
 async def main():
     server_obj = await server.init_server()
     print("Server is up and running.")

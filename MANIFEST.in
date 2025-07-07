@@ -1,4 +1,4 @@
 include README.md
 include LICENSE
-recursive-include src/http_server/static *
+recursive-include src/hango/static *
 global-exclude __pycache__ *.py[cod]

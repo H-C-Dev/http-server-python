@@ -1,7 +1,7 @@
 import socket
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
-from http_error import HTTPVersionNotSupported
+from hango.http_error import HTTPVersionNotSupported
 class CustomRequest:
     def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize

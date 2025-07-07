@@ -1,8 +1,7 @@
 import pytest
-from server import HTTPServer, Server
-from response import CustomResponse
-from custom_socket import CustomSocket
-from constants import ContentType
+from hango.server import HTTPServer, Server
+from hango.response import CustomResponse
+from hango.constants import ContentType
 
 @pytest.fixture
 def server():
@@ -13,8 +12,7 @@ def http_server():
     return HTTPServer("0.0.0.0", 8080)
 
 @pytest.fixture
-def socket():
-    return CustomSocket()
+
 
 def test__invoke_handler(server):
     mock_value = "testing..."
