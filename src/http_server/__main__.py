@@ -1,6 +1,7 @@
 import asyncio
 import signal
-from server import server
+
+from http_server import server
 import handler
 async def main():
     server_obj = await server.init_server()

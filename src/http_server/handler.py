@@ -1,6 +1,6 @@
 from response   import CustomResponse
 from type_safe  import type_safe
-from server import server
+from http_server import server
 
 @server.GET("/favicon.ico")
 @type_safe
