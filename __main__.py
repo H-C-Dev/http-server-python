@@ -1,10 +1,8 @@
 import asyncio
 from server import server
-from response import CustomResponse
-import handler
 
 def main():
-    asyncio.run(server.start_server())
-	print(" Testing: pushing commit from iPad")
+    asyncio.run(server.init_server())
 
-main()
+if __name__ == "__main__":
+    main()
