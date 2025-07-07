@@ -1,20 +1,19 @@
 import socket
+import asyncio
 from urllib.parse import parse_qs, unquote_plus
-
+from http_error import HTTPVersionNotSupported
 class CustomRequest:
     def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
         self.encoding = encoding
 
-    def __receive_byte_data(self, client_socket: socket.socket) -> bytes:
-        # empty byte
-        data = b""
-        while b"\r\n\r\n" not in data:
-            chunk = client_socket.recv(self.bufsize)
-            # if we no longer receive any chunk, also end the loop
-            if not chunk:
-                break
-            data += chunk
+
+    async def __receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
+        try:
+            data = await reader.readuntil(b"\r\n\r\n")
+        except asyncio.IncompleteReadError as e:
+            # return what was read if the stream closed before \r\n\r\n
+            return e.partial
         return data
         
     def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
@@ -29,15 +28,21 @@ class CustomRequest:
         lines = header_text.split("\r\n")
         return lines
 
-    def __extract_request_lines_and_body(self, client_socket: socket.socket) -> tuple[bytes, list[str]]:
-        data = self.__receive_byte_data(client_socket)
+    async def __extract_request_lines_and_body(self, reader: asyncio.StreamReader) -> tuple[bytes, list[str]]:
+        data = await self.__receive_byte_data(reader)
         header, body = self.__separate_lines_and_body(data)
         header_text = self.__decode_header(header)
         lines = self.__split_header_text(header_text)
         return (body, lines)
     
+    def __check_http_version(self, version):
+        if version != "HTTP/1.1":
+            raise HTTPVersionNotSupported()
+
     def __extract_request_line(self, lines):
-        return lines[0].split(" ")
+        method, path, version = lines[0].split(" ")
+        self.__check_http_version(version)
+        return (method, path, version)
     
     def __parse_headers(self, lines):
         headers = dict()
@@ -49,11 +54,11 @@ class CustomRequest:
 
         return headers
     
-    def __extract_body(self, body, headers, client_socket: socket.socket):
+    async def __extract_body(self, body, headers, reader: asyncio.StreamReader):
         content_length = int(headers.get("content-length", "0"))
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < content_length:
-            body += client_socket.recv(self.bufsize)
+            body += await reader.read(self.bufsize)
         return body
     
     def __extract_path_and_query(self, raw_path):
@@ -67,12 +72,12 @@ class CustomRequest:
             query = {}
             return (path, query)
 
-    def parse_request(self, client_socket: socket.socket) -> any:
-        body, lines = self.__extract_request_lines_and_body(client_socket)
+    async def parse_request(self, reader: asyncio.StreamReader) -> any:
+        body, lines = await self.__extract_request_lines_and_body(reader)
         # http method, path and http version in the requestLine
         method, path, version = self.__extract_request_line(lines)
         headers = self.__parse_headers(lines)
-        body = self.__extract_body(body, headers, client_socket)
+        body = await self.__extract_body(body, headers, reader)
         path, query = self.__extract_path_and_query(path)
 
         req = {

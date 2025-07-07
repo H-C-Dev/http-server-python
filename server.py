@@ -1,4 +1,5 @@
-from custom_socket import CustomSocket
+import asyncio
+# from custom_socket import CustomSocket
 from http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
 from constants import ContentType, MethodType
 from request import CustomRequest
@@ -13,44 +14,43 @@ class HTTPServer:
         self.port = port
         self.backlog = backlog
 
-    def __create_socket(self) -> CustomSocket:
-        server_socket = CustomSocket(self.port, self.backlog, self.host)
-        server_socket.create_and_bind_socket()
-        print(f"Listening on {self.host}:{self.port}")
-        return server_socket
-    
-    def __enter_accept_state(self, server_socket: CustomSocket):
-        while True:
-            (client_socket,  client_address) = server_socket.accept_connection()
-            print(f"Got request from IP: {client_address}")
-            try:
-                request = self.parse_request(client_socket)
-                response = self.handle_request(request)
-            except HTTPError as http_error:
-                response = self.handle_error(http_error)
-            except Exception as e:    
-                print("Unexpected:", e)
-                error = InternalServerError()
-                response = self.handle_error(error)
-            client_socket.sendall(response.construct_response())
-            client_socket.close()
 
-    def start_server(self):
-        server_socket = self.__create_socket()
-        self.__enter_accept_state(server_socket)
+    async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        try:
+            request = await self.parse_request(reader)
+            response = self.handle_request(request)
+            await self.__write_response(response, writer)
+        except HTTPError as http_e:
+            response = self.handle_error_response(http_e)
+            await self.__write_response(response, writer)
+        except Exception as server_e:
+            print(f'Internal Error: {server_e}')
+            response = self.handle_error_response(InternalServerError())
+            await self.__write_response(response, writer)
 
-    def parse_request(self, client_socket):
+    async def __write_response(self, response: bytes, writer: asyncio.StreamWriter):
+        writer.write(response)
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    async def init_server(self):
+        server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
+        return server
+
+    async def parse_request(self, reader: asyncio.StreamReader):
         raise NotImplementedError
 
     def handle_request(self, request):
         raise NotImplementedError
 
-    def handle_error(self, http_error):
-        return CustomResponse(
+    def handle_error_response(self, http_error):
+        response = CustomResponse(
             body=http_error.message,
             content_type=ContentType.PLAIN.value,
             status_code=str(http_error.status_code)
         )
+        return response.construct_response()
 
 class Server(HTTPServer):
 
@@ -67,21 +67,21 @@ class Server(HTTPServer):
             print(f"Error: {e}")
             raise BadRequest(f"{parameter}")
 
-    def parse_request(self, client_socket):
-        return CustomRequest().parse_request(client_socket)
+    async def parse_request(self, reader: asyncio.StreamReader):
+        return await CustomRequest().parse_request(reader)
     
     def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
         method, path = request['method'], request['path']
         return (method, path)
     
-    def handle_request(self, request) -> CustomResponse:
+    def handle_request(self, request) -> bytes:
         (method, path) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
-            response = self.__handle_GET_request(path)
-            return response
+            response = self.__handle_GET_request(path)   
+            return response.construct_response()
         elif method == MethodType.POST.value:
             response = self.__handle_POST_request(path, request)
-            return response
+            return response.construct_response()
         else:
             raise MethodNotAllowed(f"{method}")
     
