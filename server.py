@@ -39,6 +39,8 @@ class HTTPServer:
     async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         print("Received a request from a client.")
         print(reader)
+        request = await self.parse_request(reader)
+        print("[REQUEST]: ", request)
         print(writer)
 
 
@@ -48,7 +50,7 @@ class HTTPServer:
             await server.serve_forever()
 
 
-    def parse_request(self, client_socket):
+    async def parse_request(self, reader: asyncio.StreamReader):
         raise NotImplementedError
 
     def handle_request(self, request):
@@ -76,8 +78,8 @@ class Server(HTTPServer):
             print(f"Error: {e}")
             raise BadRequest(f"{parameter}")
 
-    def parse_request(self, client_socket):
-        return CustomRequest().parse_request(client_socket)
+    async def parse_request(self, client_socket):
+        return await CustomRequest().parse_request(client_socket)
     
     def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
         method, path = request['method'], request['path']
