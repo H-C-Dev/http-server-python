@@ -14,20 +14,21 @@ class HTTPServer:
         self.port = port
         self.backlog = backlog
 
-    async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        print("Received a request from a client.")
-        print(reader)
-        request = await self.parse_request(reader)
-        print("[REQUEST]: ", request)
-        response = self.handle_request(request)
-        print("[RESPONSE]: ", response)
-        writer.write(response)
 
+    async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        request = await self.parse_request(reader)
+        response = self.handle_request(request)
+        await self.__write_response(response, writer)
+
+    async def __write_response(self, response: bytes, writer: asyncio.StreamWriter):
+        writer.write(response)
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
 
     async def init_server(self):
         server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
         return server
-
 
     async def parse_request(self, reader: asyncio.StreamReader):
         raise NotImplementedError
@@ -57,14 +58,14 @@ class Server(HTTPServer):
             print(f"Error: {e}")
             raise BadRequest(f"{parameter}")
 
-    async def parse_request(self, client_socket):
-        return await CustomRequest().parse_request(client_socket)
+    async def parse_request(self, reader: asyncio.StreamReader):
+        return await CustomRequest().parse_request(reader)
     
     def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
         method, path = request['method'], request['path']
         return (method, path)
     
-    def handle_request(self, request) -> CustomResponse:
+    def handle_request(self, request) -> bytes:
         (method, path) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
             response = self.__handle_GET_request(path)   
