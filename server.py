@@ -14,28 +14,6 @@ class HTTPServer:
         self.port = port
         self.backlog = backlog
 
-    # def __create_socket(self) -> CustomSocket:
-    #     server_socket = CustomSocket(self.port, self.backlog, self.host)
-    #     server_socket.create_and_bind_socket()
-    #     print(f"Listening on {self.host}:{self.port}")
-    #     return server_socket
-    
-    # def __enter_accept_state(self, server_socket: CustomSocket):
-    #     while True:
-    #         (client_socket,  client_address) = server_socket.accept_connection()
-    #         print(f"Got request from IP: {client_address}")
-    #         try:
-    #             request = self.parse_request(client_socket)
-    #             response = self.handle_request(request)
-    #         except HTTPError as http_error:
-    #             response = self.handle_error(http_error)
-    #         except Exception as e:    
-    #             print("Unexpected:", e)
-    #             error = InternalServerError()
-    #             response = self.handle_error(error)
-    #         client_socket.sendall(response.construct_response())
-    #         client_socket.close()
-
     async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         print("Received a request from a client.")
         print(reader)
@@ -72,7 +50,6 @@ class Server(HTTPServer):
         self.serve_file = ServeFile()
 
     def __invoke_handler(self, handler, parameter) -> CustomResponse:
-        print("__invoke_handler")
         try:
             response = handler(parameter) if parameter else handler()
             return response
@@ -84,35 +61,27 @@ class Server(HTTPServer):
         return await CustomRequest().parse_request(client_socket)
     
     def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
-        print("__extract_raw_path_and_method")
         method, path = request['method'], request['path']
         return (method, path)
     
     def handle_request(self, request) -> CustomResponse:
-        print("handle_request")
         (method, path) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
-            response = self.__handle_GET_request(path)
-            
+            response = self.__handle_GET_request(path)   
             return response.construct_response()
         elif method == MethodType.POST.value:
             response = self.__handle_POST_request(path, request)
-            
             return response.construct_response()
         else:
             raise MethodNotAllowed(f"{method}")
     
         
     def __handle_GET_request(self, path):
-        print("__handle_GET_request")
         if self.serve_file.is_static_prefix(path):
             (file_bytes, content_type) = self.serve_file.serve_static_file(path)
             return CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
 
         (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
-        print(handler)
-        print(parameters)
-
         response = self.__invoke_handler(handler, parameters)
         return response
     
