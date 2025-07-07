@@ -1,5 +1,5 @@
 import asyncio
-from custom_socket import CustomSocket
+# from custom_socket import CustomSocket
 from http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
 from constants import ContentType, MethodType
 from request import CustomRequest
@@ -14,32 +14,39 @@ class HTTPServer:
         self.port = port
         self.backlog = backlog
 
-    def __create_socket(self) -> CustomSocket:
-        server_socket = CustomSocket(self.port, self.backlog, self.host)
-        server_socket.create_and_bind_socket()
-        print(f"Listening on {self.host}:{self.port}")
-        return server_socket
+    # def __create_socket(self) -> CustomSocket:
+    #     server_socket = CustomSocket(self.port, self.backlog, self.host)
+    #     server_socket.create_and_bind_socket()
+    #     print(f"Listening on {self.host}:{self.port}")
+    #     return server_socket
     
-    def __enter_accept_state(self, server_socket: CustomSocket):
-        # while True:
-            (client_socket,  client_address) = server_socket.accept_connection()
-            print(f"Got request from IP: {client_address}")
-            try:
-                request = self.parse_request(client_socket)
-                response = self.handle_request(request)
-            except HTTPError as http_error:
-                response = self.handle_error(http_error)
-            except Exception as e:    
-                print("Unexpected:", e)
-                error = InternalServerError()
-                response = self.handle_error(error)
-            client_socket.sendall(response.construct_response())
-            client_socket.close()
+    # def __enter_accept_state(self, server_socket: CustomSocket):
+    #     while True:
+    #         (client_socket,  client_address) = server_socket.accept_connection()
+    #         print(f"Got request from IP: {client_address}")
+    #         try:
+    #             request = self.parse_request(client_socket)
+    #             response = self.handle_request(request)
+    #         except HTTPError as http_error:
+    #             response = self.handle_error(http_error)
+    #         except Exception as e:    
+    #             print("Unexpected:", e)
+    #             error = InternalServerError()
+    #             response = self.handle_error(error)
+    #         client_socket.sendall(response.construct_response())
+    #         client_socket.close()
 
-    async def start_server(self):
-        # server_socket = self.__create_socket()
-        # self.__enter_accept_state(server_socket)
-        server = await asyncio.start_server(self.__enter_accept_state, self.host, self.port)
+    async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        print("Received a request from a client.")
+        print(reader)
+        print(writer)
+
+
+    async def init_server(self):
+        server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
+        async with server:
+            await server.serve_forever()
+
 
     def parse_request(self, client_socket):
         raise NotImplementedError
