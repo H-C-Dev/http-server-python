@@ -3,7 +3,7 @@ from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequ
 from hango.constants import ContentType, MethodType
 from hango.http import CustomRequest
 from hango.http import CustomResponse
-from hango.route import RouteToHandler
+from hango.routing import RouteToHandler
 from hango.util import ServeFile
 PORT=8080
 
