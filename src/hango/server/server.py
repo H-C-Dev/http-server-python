@@ -1,11 +1,10 @@
 import asyncio
-# from custom_socket import CustomSocket
-from hango.http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
+from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
 from hango.constants import ContentType, MethodType
-from hango.request import CustomRequest
-from hango.response import CustomResponse
-from hango.route import RouteToHandler
-from hango.util import ServeFile
+from hango.http import CustomRequest
+from hango.http import CustomResponse
+from hango.routing import RouteToHandler
+from hango.utils import ServeFile
 PORT=8080
 
 class HTTPServer:
@@ -119,5 +118,5 @@ class Server(HTTPServer):
     
 
 
-    
+
 server = Server("0.0.0.0", PORT)

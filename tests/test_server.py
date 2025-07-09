@@ -1,6 +1,6 @@
 import pytest
 from hango.server import HTTPServer, Server
-from hango.response import CustomResponse
+from hango.http import CustomResponse
 from hango.constants import ContentType
 
 @pytest.fixture
