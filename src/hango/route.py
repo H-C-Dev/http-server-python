@@ -1,4 +1,4 @@
-from hango.http_error import NotFound
+from hango.http import NotFound
 from hango.util import ExtractParams
 
 class Route:

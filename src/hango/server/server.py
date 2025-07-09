@@ -1,8 +1,8 @@
 import asyncio
-from hango.http_error import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
+from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest
 from hango.constants import ContentType, MethodType
-from hango.request import CustomRequest
-from hango.response import CustomResponse
+from hango.http import CustomRequest
+from hango.http import CustomResponse
 from hango.route import RouteToHandler
 from hango.util import ServeFile
 PORT=8080

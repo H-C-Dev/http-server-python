@@ -1,4 +1,4 @@
-from hango.response   import CustomResponse
+from hango.http   import CustomResponse
 from hango.type_safe  import type_safe
 from hango.server import server
 

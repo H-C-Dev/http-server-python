@@ -1,6 +1,6 @@
 import os
 from hango.config import STATIC_ROOT, SERVER_ROOT
-from hango.http_error import NotFound, InternalServerError
+from hango.http import NotFound, InternalServerError
 from hango.constants import EXTENSION_TO_MIME
 import datetime
 
