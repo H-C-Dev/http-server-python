@@ -18,6 +18,10 @@ class ContentType(Enum):
     PLAIN = "text/plain"
 
 
+class EarlyHintsClient(Enum):
+    FIREFOX = 'firefox'
+    POSTMAN = 'postman'
+
 EXTENSION_TO_MIME = {
     ".html": "text/html",
     ".json": "application/json",
@@ -26,3 +30,5 @@ EXTENSION_TO_MIME = {
     ".css": "text/css",
     ".js": "application/javascript"
 }
+
+

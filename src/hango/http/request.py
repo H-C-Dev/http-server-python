@@ -1,7 +1,8 @@
-import socket
+from hango.constants import EarlyHintsClient
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
+
 class CustomRequest:
     def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
@@ -88,5 +89,8 @@ class CustomRequest:
             "body": body,
             "headers": headers
         }
+
+        if EarlyHintsClient.FIREFOX.value.upper() in headers['user-agent'].upper() or EarlyHintsClient.POSTMAN.value.upper() in headers['user-agent'].upper():
+            print(True)
 
         return req
