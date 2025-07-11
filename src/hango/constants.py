@@ -1,6 +1,7 @@
 from enum import Enum
 
 http_status_codes_message = {
+    "103": "Early Hints",
     "200": "OK", 
     "400": "Bad Request", 
     "404": "Not Found",
