@@ -10,7 +10,7 @@ from .http_error import (
     HTTPVersionNotSupported,
 )
 from .request import CustomRequest
-from .response import CustomResponse
+from .response import CustomResponse, CustomEarlyHintsResponse
 
 __all__ = [
     "HTTPError",
@@ -24,4 +24,5 @@ __all__ = [
     "HTTPVersionNotSupported",
     "CustomRequest",
     "CustomResponse",
+    "CustomEarlyHintsResponse"
 ]
