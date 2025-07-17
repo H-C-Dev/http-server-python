@@ -46,8 +46,33 @@ class CustomResponse:
     def log_val(self):
         print(f"\n[RESPONSE VAL LOG]\n{show_date_time('response') or ''}body: {self.body}\nstatus_code: {self.status_code}\nencoding: {self.encoding}\ncontent_type: {self.content_type}\nstatus_line: {self.status_code}\nheader_block: {self.header_block}\n[END]\n")
 
+class CustomEarlyHintsResponse(CustomResponse):
+    def __init__(self, hints):
+        super().__init__(body="", status_code=103,  content_type=ContentType.JSON.value)
+        self.hints = hints
+
+    def __set_early_hints_status_line(self):
+        self.status_line = f"HTTP/1.1 {self.status_code} {http_status_codes_message[self.status_code]}\r\n"
+    
+    def __set_early_hints_header_block(self):
+        self.header_block = (
+                f"Link: {self.hints['url']}; rel={self.hints['rel']}; as={self.hints['as']} type={self.hints['type']}\r\n"
+                "\r\n"
+            )
         
+    def __encode_and_combine_early_hints_response(self):
+        print("[HEADER]", self.header_block)
+        print(self.status_line)
+        return self.status_line.encode(self.encoding) + self.header_block.encode(self.encoding)
+
+    def construct_early_hints_response(self) -> bytes:
+        self.__set_early_hints_status_line()
+        self.__set_early_hints_header_block()
+        formatted_response = self.__encode_and_combine_early_hints_response()
+        return formatted_response
 
 class CustomJSONResponse(CustomResponse):
     def __init__(self, body: str, status_code: str, encoding: str = 'utf-8'):
         super().__init__(body, status_code,  content_type=ContentType.JSON.value, encoding=encoding)
+
+

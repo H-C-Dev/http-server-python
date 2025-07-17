@@ -1,7 +1,8 @@
-import socket
+from hango.constants import EarlyHintsClient
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
+
 class CustomRequest:
     def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
@@ -71,12 +72,18 @@ class CustomRequest:
             path = raw_path
             query = {}
             return (path, query)
+        
+    def __client_supports_early_hints(self, user_agent: str) -> bool:
+        if EarlyHintsClient.FIREFOX.value.upper() in user_agent.upper() or EarlyHintsClient.POSTMAN.value.upper() in user_agent.upper():
+            return True
+        return False
 
     async def parse_request(self, reader: asyncio.StreamReader) -> any:
         body, lines = await self.__extract_request_lines_and_body(reader)
         # http method, path and http version in the requestLine
         method, path, version = self.__extract_request_line(lines)
         headers = self.__parse_headers(lines)
+        is_early_hints_supported = self.__client_supports_early_hints(headers['user-agent'])
         body = await self.__extract_body(body, headers, reader)
         path, query = self.__extract_path_and_query(path)
 
@@ -86,7 +93,7 @@ class CustomRequest:
             "version": version,
             "query": query,
             "body": body,
-            "headers": headers
+            "headers": headers,
+            "is_early_hints_supported": is_early_hints_supported
         }
-
         return req

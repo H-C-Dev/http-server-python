@@ -1,6 +1,7 @@
 from enum import Enum
 
 http_status_codes_message = {
+    "103": "Early Hints",
     "200": "OK", 
     "400": "Bad Request", 
     "404": "Not Found",
@@ -18,6 +19,10 @@ class ContentType(Enum):
     PLAIN = "text/plain"
 
 
+class EarlyHintsClient(Enum):
+    FIREFOX = 'firefox'
+    POSTMAN = 'postman'
+
 EXTENSION_TO_MIME = {
     ".html": "text/html",
     ".json": "application/json",
@@ -26,3 +31,5 @@ EXTENSION_TO_MIME = {
     ".css": "text/css",
     ".js": "application/javascript"
 }
+
+
