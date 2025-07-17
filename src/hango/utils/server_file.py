@@ -2,6 +2,7 @@ import os
 from hango.config import STATIC_ROOT, SERVER_ROOT
 from hango.http import NotFound, InternalServerError
 from hango.constants import EXTENSION_TO_MIME
+import re
 
 class ServeFile:
 
@@ -25,9 +26,12 @@ class ServeFile:
 
     def __get_file_content_type(self, path) -> str:
         i = len(path) - 1
+        isHtml = False
         while i >= 0:
             if path[i] == ".":
-                return self.__get_MIME(path[i:])
+                if path[i:] == ".html":
+                    isHtml = True
+                return (self.__get_MIME(path[i:]), isHtml)
             i-= 1
         raise InternalServerError(f"Something went wrong while reading the file: {path}")
     
@@ -56,14 +60,63 @@ class ServeFile:
         self.__check_common_path(formatted_path)
         is_File = os.path.isfile(formatted_path)
         return (is_File, formatted_path)
+    
+    def __extract_early_hints(self, html: str):
+        css_links = re.findall(
+            r'<link\b[^>]*\brel=["\']?stylesheet["\']?[^>]*\bhref=["\']([^"\']+)["\']',
+            html,
+            flags=re.IGNORECASE
+        )
+
+        js_srcs = re.findall(
+            r'<script\b[^>]*\bsrc=["\']([^"\']+)["\']',
+            html,
+            flags=re.IGNORECASE
+        )
+
+        hints = []
+        for href in css_links:
+            hints.append({
+                "url": href,
+                "rel": "preload",
+                "as": "style",
+                "type": "text/css"
+            })
+        for src in js_srcs:
+            hints.append({
+                "url": src,
+                "rel": "preload",
+                "as": "script",
+                "type": "application/javascript"
+            })
+        img_srcs = re.findall(
+            r'<img\b[^>]*\bsrc=["\']([^"\']+)["\']',
+            html,
+            flags=re.IGNORECASE
+        )
+        for src in img_srcs:
+            hints.append({
+                "url": src,
+                "rel": "preload",
+                "as": "image",
+                "type": "image"
+            })
+        return hints
+    
+    def __extract_html_early_hints_from_bytes(self, file_bytes):
+        html = file_bytes.decode('utf-8')
+        hints = self.__extract_early_hints(html)
+        return hints
 
     def serve_static_file(self, path: str) -> bytes:
         (is_File, concat_path) = self.__is_file_present(path)
         if is_File:
             file_bytes = self.__pick_file(concat_path)
-            content_type = self.__get_file_content_type(path)
+            (content_type, isHtml)= self.__get_file_content_type(path)
+            hints = []
+            if isHtml: 
+                hints = self.__extract_html_early_hints_from_bytes(file_bytes)
             print(f"Returning file_bytes: {file_bytes}")
-            return (file_bytes, content_type)
+            return (file_bytes, content_type, hints)
         else:
             raise NotFound(f"{path} Not Found")
-            

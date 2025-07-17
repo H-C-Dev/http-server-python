@@ -2,7 +2,7 @@ import asyncio
 from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, CustomResponse, CustomEarlyHintsResponse
 from hango.constants import ContentType, MethodType
 from hango.routing import RouteToHandler
-from hango.utils import ServeFile, HandleEarlyHintsResponse
+from hango.utils import ServeFile
 PORT=8080
 
 class HTTPServer:
@@ -27,7 +27,7 @@ class HTTPServer:
 
     async def write_early_hints_response(self, response: bytes, writer: asyncio.StreamWriter):
         writer.write(response)
-        print('sending early response...')
+        await writer.drain()
 
     async def __write_response(self, response: bytes, writer: asyncio.StreamWriter):
         writer.write(response)
@@ -72,36 +72,21 @@ class Server(HTTPServer):
         return await CustomRequest().parse_request(reader)
     
     def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
-        method, path, is_early_hints_supported, headers = request['method'], request['path'], request['is_early_hints_supported'], request['headers']
-        return (method, path, is_early_hints_supported, headers)
+        method, path, is_early_hints_supported = request['method'], request['path'], request['is_early_hints_supported']
+        return (method, path, is_early_hints_supported)
     
+    async def __handle_early_hints_response(self, writer, custom_hints=[]):
+        early_hints_response = CustomEarlyHintsResponse(custom_hints)
+        response = early_hints_response.construct_early_hints_response()
+        await super().write_early_hints_response(response, writer)
 
-
-
-    async def __handle_early_hints_response(self, header, path, writer):
-        
-        handle_early_response = HandleEarlyHintsResponse()
-        # decide what hints to include in 103
-        hints = handle_early_response.handle_early_hints_response(header, path)
-        print('[hints]', hints)
-        if hints:
-            early_hints_response = CustomEarlyHintsResponse(hints)
-            print("[early_hints_response]",early_hints_response)
-            response = early_hints_response.construct_early_hints_response()
-            print(response)
-            # then call CustomEarlyHintsResponse to make the 103 response
-            await super().write_early_hints_response(response, writer)
-        else:
-            print("no hints")
         
 
     
     async def handle_request(self, request, writer) -> bytes:
-        (method, path, is_early_hints_supported, header) = self.__extract_raw_path_and_method(request)
-        if is_early_hints_supported:
-            await self.__handle_early_hints_response(header, path, writer)
+        (method, path, is_early_hints_supported) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
-            response = self.__handle_GET_request(path)   
+            response = await self.__handle_GET_request(path, writer, is_early_hints_supported)   
             return response.construct_response()
         elif method == MethodType.POST.value:
             response = self.__handle_POST_request(path, request)
@@ -110,10 +95,13 @@ class Server(HTTPServer):
             raise MethodNotAllowed(f"{method}")
     
         
-    def __handle_GET_request(self, path):
+    async def __handle_GET_request(self, path, writer, is_early_hints_supported):
         if self.serve_file.is_static_prefix(path):
-            (file_bytes, content_type) = self.serve_file.serve_static_file(path)
-            return CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
+            (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
+            if len(hints) > 0 and is_early_hints_supported:
+                await self.__handle_early_hints_response(writer, hints)
+            response = CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
+            return response
 
         (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
         response = self.__invoke_handler(handler, parameters)
