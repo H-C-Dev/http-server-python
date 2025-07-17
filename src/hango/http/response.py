@@ -54,15 +54,19 @@ class CustomEarlyHintsResponse(CustomResponse):
     def __set_early_hints_status_line(self):
         self.status_line = f"HTTP/1.1 {self.status_code} {http_status_codes_message[self.status_code]}\r\n"
     
+
+
     def __set_early_hints_header_block(self):
-        self.header_block = (
-                f"Link: {self.hints['url']}; rel={self.hints['rel']}; as={self.hints['as']} type={self.hints['type']}\r\n"
-                "\r\n"
-            )
-        
+        header_block = ""
+        for hint in self.hints:
+             header_block += (
+                    f"Link: <{hint['url']}>; rel={hint['rel']}; as={hint['as']}; type={hint['type']}\r\n"
+                )
+        header_block += "\r\n"
+        self.header_block = header_block
+
+ 
     def __encode_and_combine_early_hints_response(self):
-        print("[HEADER]", self.header_block)
-        print(self.status_line)
         return self.status_line.encode(self.encoding) + self.header_block.encode(self.encoding)
 
     def construct_early_hints_response(self) -> bytes:
