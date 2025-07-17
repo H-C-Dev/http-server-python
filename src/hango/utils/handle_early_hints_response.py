@@ -1,3 +1,4 @@
+# redundant 
 class HandleEarlyHintsResponse:
     def __extract_header_info(self, header):
         print("[header]", header)

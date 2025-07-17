@@ -89,6 +89,18 @@ class ServeFile:
                 "as": "script",
                 "type": "application/javascript"
             })
+        img_srcs = re.findall(
+            r'<img\b[^>]*\bsrc=["\']([^"\']+)["\']',
+            html,
+            flags=re.IGNORECASE
+        )
+        for src in img_srcs:
+            hints.append({
+                "url": src,
+                "rel": "preload",
+                "as": "image",
+                "type": "image"
+            })
         return hints
     
     def __extract_html_early_hints_from_bytes(self, file_bytes):

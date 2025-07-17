@@ -2,7 +2,7 @@ import asyncio
 from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, CustomResponse, CustomEarlyHintsResponse
 from hango.constants import ContentType, MethodType
 from hango.routing import RouteToHandler
-from hango.utils import ServeFile, HandleEarlyHintsResponse
+from hango.utils import ServeFile
 PORT=8080
 
 class HTTPServer:
@@ -72,34 +72,21 @@ class Server(HTTPServer):
         return await CustomRequest().parse_request(reader)
     
     def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
-        method, path, is_early_hints_supported, headers = request['method'], request['path'], request['is_early_hints_supported'], request['headers']
-        return (method, path, is_early_hints_supported, headers)
+        method, path, is_early_hints_supported = request['method'], request['path'], request['is_early_hints_supported']
+        return (method, path, is_early_hints_supported)
     
-    async def __handle_early_hints_response(self, header, path, writer, custom_hints=[]):
-        handle_early_response = HandleEarlyHintsResponse()
-        hints = handle_early_response.handle_early_hints_response(header, path)
-        if len(custom_hints) > 0:
-            early_hints_response = CustomEarlyHintsResponse(custom_hints)
-            response = early_hints_response.construct_early_hints_response()
-            await super().write_early_hints_response(response, writer)
-        elif hints:
-            hints_arr = []
-            hints_arr.append(hints)
-            early_hints_response = CustomEarlyHintsResponse(hints_arr)
-            response = early_hints_response.construct_early_hints_response()
-            await super().write_early_hints_response(response, writer)
-        else:
-            print("no hints")
+    async def __handle_early_hints_response(self, writer, custom_hints=[]):
+        early_hints_response = CustomEarlyHintsResponse(custom_hints)
+        response = early_hints_response.construct_early_hints_response()
+        await super().write_early_hints_response(response, writer)
+
         
 
     
     async def handle_request(self, request, writer) -> bytes:
-        (method, path, is_early_hints_supported, header) = self.__extract_raw_path_and_method(request)
-        if is_early_hints_supported and not self.serve_file.is_static_prefix(path):
-            await self.__handle_early_hints_response(header, path, writer)
-
+        (method, path, is_early_hints_supported) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
-            response = await self.__handle_GET_request(header, path, writer)   
+            response = await self.__handle_GET_request(path, writer, is_early_hints_supported)   
             return response.construct_response()
         elif method == MethodType.POST.value:
             response = self.__handle_POST_request(path, request)
@@ -108,12 +95,13 @@ class Server(HTTPServer):
             raise MethodNotAllowed(f"{method}")
     
         
-    async def __handle_GET_request(self, header, path, writer):
+    async def __handle_GET_request(self, path, writer, is_early_hints_supported):
         if self.serve_file.is_static_prefix(path):
             (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
-            if len(hints) > 0:
-                await self.__handle_early_hints_response(header, path, writer, custom_hints=hints)
-            return CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
+            if len(hints) > 0 and is_early_hints_supported:
+                await self.__handle_early_hints_response(writer, hints)
+            response = CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
+            return response
 
         (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
         response = self.__invoke_handler(handler, parameters)
