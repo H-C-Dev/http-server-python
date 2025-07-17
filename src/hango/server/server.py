@@ -27,7 +27,7 @@ class HTTPServer:
 
     async def write_early_hints_response(self, response: bytes, writer: asyncio.StreamWriter):
         writer.write(response)
-        print('sending early response...')
+        await writer.drain()
 
     async def __write_response(self, response: bytes, writer: asyncio.StreamWriter):
         writer.write(response)
@@ -75,21 +75,18 @@ class Server(HTTPServer):
         method, path, is_early_hints_supported, headers = request['method'], request['path'], request['is_early_hints_supported'], request['headers']
         return (method, path, is_early_hints_supported, headers)
     
-
-
-
-    async def __handle_early_hints_response(self, header, path, writer):
-        
+    async def __handle_early_hints_response(self, header, path, writer, custom_hints=[]):
         handle_early_response = HandleEarlyHintsResponse()
-        # decide what hints to include in 103
         hints = handle_early_response.handle_early_hints_response(header, path)
-        print('[hints]', hints)
-        if hints:
-            early_hints_response = CustomEarlyHintsResponse(hints)
-            print("[early_hints_response]",early_hints_response)
+        if len(custom_hints) > 0:
+            early_hints_response = CustomEarlyHintsResponse(custom_hints)
             response = early_hints_response.construct_early_hints_response()
-            print(response)
-            # then call CustomEarlyHintsResponse to make the 103 response
+            await super().write_early_hints_response(response, writer)
+        elif hints:
+            hints_arr = []
+            hints_arr.append(hints)
+            early_hints_response = CustomEarlyHintsResponse(hints_arr)
+            response = early_hints_response.construct_early_hints_response()
             await super().write_early_hints_response(response, writer)
         else:
             print("no hints")
@@ -98,10 +95,11 @@ class Server(HTTPServer):
     
     async def handle_request(self, request, writer) -> bytes:
         (method, path, is_early_hints_supported, header) = self.__extract_raw_path_and_method(request)
-        if is_early_hints_supported:
+        if is_early_hints_supported and not self.serve_file.is_static_prefix(path):
             await self.__handle_early_hints_response(header, path, writer)
+
         if method == MethodType.GET.value:
-            response = self.__handle_GET_request(path)   
+            response = await self.__handle_GET_request(header, path, writer)   
             return response.construct_response()
         elif method == MethodType.POST.value:
             response = self.__handle_POST_request(path, request)
@@ -110,9 +108,11 @@ class Server(HTTPServer):
             raise MethodNotAllowed(f"{method}")
     
         
-    def __handle_GET_request(self, path):
+    async def __handle_GET_request(self, header, path, writer):
         if self.serve_file.is_static_prefix(path):
-            (file_bytes, content_type) = self.serve_file.serve_static_file(path)
+            (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
+            if len(hints) > 0:
+                await self.__handle_early_hints_response(header, path, writer, custom_hints=hints)
             return CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
 
         (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
