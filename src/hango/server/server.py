@@ -43,7 +43,7 @@ class HTTPServer:
     async def parse_request(self, reader: asyncio.StreamReader):
         raise NotImplementedError
 
-    def handle_request(self, request, writer):
+    async def handle_request(self, request, writer):
         raise NotImplementedError
 
     def handle_error_response(self, http_error):
@@ -73,11 +73,16 @@ class Server(HTTPServer):
 
     async def __invoke_handler(self, handler, parameter) -> CustomResponse:
         try:
-            if self.executor is None:
-                response = handler(parameter) if parameter else handler()
+            if asyncio.iscoroutinefunction(handler):
+                response = await handler(parameter) if parameter else await handler()
                 return response
-            loop = asyncio.get_running_loop()
-            return await loop.run_in_executor(self.executor, (lambda: handler(parameter)) if parameter else handler)
+            else:
+                if self.executor:
+                    loop = asyncio.get_running_loop()
+                    return await loop.run_in_executor(self.executor, (lambda: handler(parameter)) if parameter else handler)
+                else:
+                    response = handler(parameter) if parameter else handler()
+                    return response
         except Exception as e:
             print(f"Error: {e}")
             raise BadRequest(f"{parameter}")
@@ -146,4 +151,4 @@ class Server(HTTPServer):
 
 
 
-server = Server("0.0.0.0", PORT, concurrency_model='thread')
+server = Server("0.0.0.0", PORT, concurrency_model='')
