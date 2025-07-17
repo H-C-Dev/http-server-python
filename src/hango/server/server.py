@@ -3,6 +3,7 @@ from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequ
 from hango.constants import ContentType, MethodType
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 PORT=8080
 
 class HTTPServer:
@@ -55,15 +56,28 @@ class HTTPServer:
 
 class Server(HTTPServer):
 
-    def __init__(self, host, port, backlog=5):
+    def __init__(self, host, port, backlog=5, concurrency_model=''):
         super().__init__(host, port, backlog)
         self.router = RouteToHandler()
         self.serve_file = ServeFile()
+        if concurrency_model =='process':
+            print('process')
+            self.executor = ProcessPoolExecutor()
+        elif concurrency_model =='thread':
+            print('thread')
+            self.executor = ThreadPoolExecutor()
+        elif concurrency_model == '':
+            self.executor = None
+        else:
+            raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
 
-    def __invoke_handler(self, handler, parameter) -> CustomResponse:
+    async def __invoke_handler(self, handler, parameter) -> CustomResponse:
         try:
-            response = handler(parameter) if parameter else handler()
-            return response
+            if self.executor is None:
+                response = handler(parameter) if parameter else handler()
+                return response
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(self.executor, (lambda: handler(parameter)) if parameter else handler)
         except Exception as e:
             print(f"Error: {e}")
             raise BadRequest(f"{parameter}")
@@ -89,7 +103,7 @@ class Server(HTTPServer):
             response = await self.__handle_GET_request(path, writer, is_early_hints_supported)   
             return response.construct_response()
         elif method == MethodType.POST.value:
-            response = self.__handle_POST_request(path, request)
+            response = await self.__handle_POST_request(path, request)
             return response.construct_response()
         else:
             raise MethodNotAllowed(f"{method}")
@@ -104,17 +118,17 @@ class Server(HTTPServer):
             return response
 
         (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
-        response = self.__invoke_handler(handler, parameters)
+        response = await self.__invoke_handler(handler, parameters)
         return response
     
     def __extract_POST_request_body(self, request):
         body = request['body'].decode(request.get('encoding', 'utf-8'))
         return body
     
-    def __handle_POST_request(self, path, request):
+    async def __handle_POST_request(self, path, request):
         handler, parameters = self.router.match_handler(MethodType.POST.value, path)
         request_body = self.__extract_POST_request_body(request)
-        response = self.__invoke_handler(handler, request_body)
+        response = await self.__invoke_handler(handler, request_body)
         return response
     
     def GET(self, template: str):
@@ -132,4 +146,4 @@ class Server(HTTPServer):
 
 
 
-server = Server("0.0.0.0", PORT)
+server = Server("0.0.0.0", PORT, concurrency_model='thread')
