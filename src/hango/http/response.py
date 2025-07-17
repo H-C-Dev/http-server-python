@@ -73,6 +73,7 @@ class CustomEarlyHintsResponse(CustomResponse):
         self.__set_early_hints_status_line()
         self.__set_early_hints_header_block()
         formatted_response = self.__encode_and_combine_early_hints_response()
+        print('[FORMATTED RESPONSE]', formatted_response)
         return formatted_response
 
 class CustomJSONResponse(CustomResponse):
