@@ -1,6 +1,7 @@
 from hango.http   import CustomResponse
 from hango.utils  import type_safe
 from hango.server import server
+import asyncio
 
 @server.GET("/favicon.ico")
 @type_safe
@@ -28,3 +29,9 @@ def post_endpoint(post_data: str) -> CustomResponse:
 @type_safe
 def test_safe(foo: str) -> str:
     return foo
+
+@server.GET("/async-test")
+@type_safe
+async def async_test_handler() -> CustomResponse:
+    await asyncio.sleep(1)  
+    return CustomResponse(body="this is from async function", status_code="200")
