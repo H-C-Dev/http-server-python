@@ -35,3 +35,12 @@ def test_safe(foo: str) -> str:
 async def async_test_handler() -> CustomResponse:
     await asyncio.sleep(1)  
     return CustomResponse(body="this is from async function", status_code="200")
+
+
+@server.set_after_each_handler
+def log_response(request, response):
+    print('[RESPONSE]:',response)
+
+@server.set_before_each_handler
+def log_request(request):
+    print('[REQUEST]', request)
