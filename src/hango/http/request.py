@@ -2,11 +2,13 @@ from hango.constants import EarlyHintsClient
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
+from hango.routing import RouteToHandler
 
 class CustomRequest:
-    def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8'):
+    def __init__(self, router: RouteToHandler, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
         self.encoding = encoding
+        self.router = router
 
 
     async def __receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
@@ -86,14 +88,16 @@ class CustomRequest:
         is_early_hints_supported = self.__client_supports_early_hints(headers['user-agent'])
         body = await self.__extract_body(body, headers, reader)
         path, query = self.__extract_path_and_query(path)
+        (handler, parameters) = self.router.match_handler(method, path)
 
-        req = {
+        request = {
             "method": method,
             "path": unquote_plus(path),
             "version": version,
             "query": query,
             "body": body.decode(self.encoding, errors='ignore'),
             "headers": headers,
-            "is_early_hints_supported": is_early_hints_supported
+            "is_early_hints_supported": is_early_hints_supported,
+            "params": parameters or None,
         }
-        return req
+        return (request, handler)

@@ -15,8 +15,8 @@ class HTTPServer:
 
     async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
-            request = await self.parse_request(reader)
-            response = await self.handle_request(request, writer)
+            (request, handler) = await self.parse_request(reader)
+            response = await self.handle_request(request, handler, writer)
             await self.__write_response(response, writer)
         except HTTPError as http_e:
             response = self.handle_error_response(http_e)
@@ -52,7 +52,8 @@ class HTTPServer:
             content_type=ContentType.PLAIN.value,
             status_code=str(http_error.status_code)
         )
-        return response.construct_response()
+        (formatted_response, dict_response) = response.construct_response()
+        return formatted_response
 
 class Server(HTTPServer):
 
@@ -108,10 +109,10 @@ class Server(HTTPServer):
 
 
     async def parse_request(self, reader: asyncio.StreamReader):
-        return await CustomRequest().parse_request(reader)
+        return await CustomRequest(router=self.router).parse_request(reader)
     
-    def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
-        method, path, is_early_hints_supported = request['method'], request['path'], request['is_early_hints_supported']
+    def __extract_useful_request_info(self, request) -> tuple[str, str]:
+        method, path, is_early_hints_supported = request['method'], request['path'],request['is_early_hints_supported']
         return (method, path, is_early_hints_supported)
     
     async def __handle_early_hints_response(self, writer, custom_hints=[]):
@@ -120,16 +121,14 @@ class Server(HTTPServer):
         await super().write_early_hints_response(response, writer)
     
     
-    async def handle_request(self, request, writer) -> bytes:
+    async def handle_request(self, request, handler, writer) -> bytes:
         # run the global hook before handler
         for global_hook in self._hook_before_each_handler:
             result = global_hook(request)
             if asyncio.iscoroutine(result):
                 await result
 
-        (method, path, is_early_hints_supported) = self.__extract_raw_path_and_method(request)
-        (handler, parameters) = self.router.match_handler(method, path)
-        request['params'] = parameters
+        (method, path, is_early_hints_supported) = self.__extract_useful_request_info(request)
         if method == MethodType.GET.value and self.serve_file.is_static_prefix(path):
             response = await self.__handle_GET_static_request(path, writer, is_early_hints_supported)
         elif method == MethodType.POST.value or method == MethodType.GET.value:
