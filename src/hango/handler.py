@@ -51,6 +51,8 @@ def foo_middleware(handler):
     async def wrapped(request):
         print("[Middleware] mw says hello to handler for:", request)
         response = handler(request)
+        if asyncio.iscoroutine(response):
+             response = await response
         print("[Middleware] mw says bye to handler response:", response)
         return response
     return wrapped
