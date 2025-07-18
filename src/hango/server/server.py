@@ -60,6 +60,11 @@ class Server(HTTPServer):
         super().__init__(host, port, backlog)
         self.router = RouteToHandler()
         self.serve_file = ServeFile()
+        self._before_each_handler = []
+        self._after_each_handler = []
+
+
+
         if concurrency_model =='process':
             print('process')
             self.executor = ProcessPoolExecutor()
@@ -70,6 +75,14 @@ class Server(HTTPServer):
             self.executor = None
         else:
             raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
+    
+    def set_before_each_handler(self, func):
+        self._before_each_handler.append(func)
+        return func
+    
+    def set_after_each_handler(self, func):
+        self._after_each_handler.append(func)
+        return func
 
     async def __invoke_handler(self, handler, parameter) -> CustomResponse:
         try:
@@ -98,22 +111,31 @@ class Server(HTTPServer):
         early_hints_response = CustomEarlyHintsResponse(custom_hints)
         response = early_hints_response.construct_early_hints_response()
         await super().write_early_hints_response(response, writer)
-
-        
-
+    
     
     async def handle_request(self, request, writer) -> bytes:
+        # run the global hook before handler
+        for global_hook in self._before_each_handler:
+            result = global_hook(request)
+            if asyncio.iscoroutine(result):
+                await result
+
         (method, path, is_early_hints_supported) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
             response = await self.__handle_GET_request(path, writer, is_early_hints_supported)   
-            return response.construct_response()
         elif method == MethodType.POST.value:
             response = await self.__handle_POST_request(path, request)
-            return response.construct_response()
         else:
             raise MethodNotAllowed(f"{method}")
     
-        
+        for global_hook in self._after_each_handler:
+            result = global_hook(request, response.construct_response())
+            if asyncio.iscoroutine(result):
+                await result
+            
+        return response.construct_response()
+    
+
     async def __handle_GET_request(self, path, writer, is_early_hints_supported):
         if self.serve_file.is_static_prefix(path):
             (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
