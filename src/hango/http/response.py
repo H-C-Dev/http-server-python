@@ -19,7 +19,11 @@ class CustomResponse:
             return self.body
         return str(self.body).encode(self.encoding)
 
-    
+    def __return_response_detail(self):
+        return {"status_code": self.status_code, "headers": self.status_line + self.header_block, "body": self.__encode_and_combine_response(), "content_type": self.content_type}
+
+
+
     def __set_status_line(self):
         self.status_line = f"HTTP/1.1 {self.status_code} {http_status_codes_message[self.status_code]}\r\n"
     
@@ -38,13 +42,12 @@ class CustomResponse:
         if str(self.status_code) in http_status_codes_message:
             self.__set_status_line()
             self.__set_header_block()
+            dict_response = self.__return_response_detail()
             formatted_response = self.__encode_and_combine_response()
-            return formatted_response
+            return (formatted_response, dict_response)
         else:
             raise Exception("Status code not found")
-    
-    def log_val(self):
-        print(f"\n[RESPONSE VAL LOG]\n{show_date_time('response') or ''}body: {self.body}\nstatus_code: {self.status_code}\nencoding: {self.encoding}\ncontent_type: {self.content_type}\nstatus_line: {self.status_code}\nheader_block: {self.header_block}\n[END]\n")
+
 
 class CustomEarlyHintsResponse(CustomResponse):
     def __init__(self, hints):
