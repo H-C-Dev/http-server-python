@@ -87,21 +87,22 @@ class Server(HTTPServer):
         self._hook_after_each_handler.append(func)
         return func
 
-    async def __invoke_handler(self, handler, parameter) -> CustomResponse:
+    async def __invoke_handler(self, handler, request) -> CustomResponse:
         try:
             if asyncio.iscoroutinefunction(handler):
-                response = await handler(parameter) if parameter else await handler()
+                response = await handler(request) 
                 return response
             else:
                 if self.executor:
                     loop = asyncio.get_running_loop()
-                    return await loop.run_in_executor(self.executor, (lambda: handler(parameter)) if parameter else handler)
+                    return await loop.run_in_executor(self.executor, (lambda: handler(request)))
                 else:
-                    response = handler(parameter) if parameter else handler()
+                    response = handler(request)
                     return response
         except Exception as e:
             print(f"Error: {e}")
-            raise BadRequest(f"{parameter}")
+            raise BadRequest(f"{request['body']}")
+
 
     async def parse_request(self, reader: asyncio.StreamReader):
         return await CustomRequest().parse_request(reader)
@@ -124,13 +125,14 @@ class Server(HTTPServer):
                 await result
 
         (method, path, is_early_hints_supported) = self.__extract_raw_path_and_method(request)
-        if method == MethodType.GET.value:
-            response = await self.__handle_GET_request(path, writer, request, is_early_hints_supported)   
-        elif method == MethodType.POST.value:
-            response = await self.__handle_POST_request(path, request['body'])
+        (handler, parameters) = self.router.match_handler(method, path)
+        request['params'] = parameters
+        if method == MethodType.GET.value and self.serve_file.is_static_prefix(path):
+            response = await self.__handle_GET_static_request(path, writer, is_early_hints_supported)
+        elif method == MethodType.POST.value or method == MethodType.GET.value:
+            response = await self.__invoke_handler(handler, request)
         else:
             raise MethodNotAllowed(f"{method}")
-        
         (formatted_response, dict_response) = response.construct_response()
 
         for global_hook in self._hook_after_each_handler:
@@ -141,22 +143,13 @@ class Server(HTTPServer):
         return formatted_response
     
 
-    async def __handle_GET_request(self, path, writer, request, is_early_hints_supported):
-        if self.serve_file.is_static_prefix(path):
+    async def __handle_GET_static_request(self, path, writer, is_early_hints_supported):
             (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
                 await self.__handle_early_hints_response(writer, hints)
             response = CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
             return response
 
-        (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
-        response = await self.__invoke_handler(handler, parameters, request)
-        return response
-    
-    async def __handle_POST_request(self, path, request_body):
-        handler, parameters = self.router.match_handler(MethodType.POST.value, path)
-        response = await self.__invoke_handler(handler, request_body)
-        return response
     
     def GET(self, template: str):
         def decorator(func):
