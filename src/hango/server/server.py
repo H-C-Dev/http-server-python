@@ -60,10 +60,8 @@ class Server(HTTPServer):
         super().__init__(host, port, backlog)
         self.router = RouteToHandler()
         self.serve_file = ServeFile()
-        self._before_each_handler = []
-        self._after_each_handler = []
-
-
+        self._hook_before_each_handler = []
+        self._hook_after_each_handler = []
 
         if concurrency_model =='process':
             print('process')
@@ -76,12 +74,12 @@ class Server(HTTPServer):
         else:
             raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
     
-    def set_before_each_handler(self, func):
-        self._before_each_handler.append(func)
+    def set_hook_before_each_handler(self, func):
+        self._hook_before_each_handler.append(func)
         return func
     
-    def set_after_each_handler(self, func):
-        self._after_each_handler.append(func)
+    def set_hook_after_each_handler(self, func):
+        self._hook_after_each_handler.append(func)
         return func
 
     async def __invoke_handler(self, handler, parameter) -> CustomResponse:
@@ -115,7 +113,7 @@ class Server(HTTPServer):
     
     async def handle_request(self, request, writer) -> bytes:
         # run the global hook before handler
-        for global_hook in self._before_each_handler:
+        for global_hook in self._hook_before_each_handler:
             result = global_hook(request)
             if asyncio.iscoroutine(result):
                 await result
@@ -128,7 +126,7 @@ class Server(HTTPServer):
         else:
             raise MethodNotAllowed(f"{method}")
     
-        for global_hook in self._after_each_handler:
+        for global_hook in self._hook_after_each_handler:
             result = global_hook(request, response.construct_response())
             if asyncio.iscoroutine(result):
                 await result
