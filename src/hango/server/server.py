@@ -62,6 +62,7 @@ class Server(HTTPServer):
         self.serve_file = ServeFile()
         self._hook_before_each_handler = []
         self._hook_after_each_handler = []
+        self._global_middlewares = []
 
         if concurrency_model =='process':
             print('process')
@@ -73,7 +74,11 @@ class Server(HTTPServer):
             self.executor = None
         else:
             raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
-    
+
+    def set_global_middlewares(self, func):
+        self._global_middlewares.append(func)
+        return func
+
     def set_hook_before_each_handler(self, func):
         self._hook_before_each_handler.append(func)
         return func
@@ -120,21 +125,23 @@ class Server(HTTPServer):
 
         (method, path, is_early_hints_supported) = self.__extract_raw_path_and_method(request)
         if method == MethodType.GET.value:
-            response = await self.__handle_GET_request(path, writer, is_early_hints_supported)   
+            response = await self.__handle_GET_request(path, writer, request, is_early_hints_supported)   
         elif method == MethodType.POST.value:
-            response = await self.__handle_POST_request(path, request)
+            response = await self.__handle_POST_request(path, request['body'])
         else:
             raise MethodNotAllowed(f"{method}")
-    
+        
+        (formatted_response, dict_response) = response.construct_response()
+
         for global_hook in self._hook_after_each_handler:
-            result = global_hook(request, response.construct_response())
+            result = global_hook(request, dict_response)
             if asyncio.iscoroutine(result):
                 await result
             
-        return response.construct_response()
+        return formatted_response
     
 
-    async def __handle_GET_request(self, path, writer, is_early_hints_supported):
+    async def __handle_GET_request(self, path, writer, request, is_early_hints_supported):
         if self.serve_file.is_static_prefix(path):
             (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
@@ -143,16 +150,11 @@ class Server(HTTPServer):
             return response
 
         (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
-        response = await self.__invoke_handler(handler, parameters)
+        response = await self.__invoke_handler(handler, parameters, request)
         return response
     
-    def __extract_POST_request_body(self, request):
-        body = request['body'].decode(request.get('encoding', 'utf-8'))
-        return body
-    
-    async def __handle_POST_request(self, path, request):
+    async def __handle_POST_request(self, path, request_body):
         handler, parameters = self.router.match_handler(MethodType.POST.value, path)
-        request_body = self.__extract_POST_request_body(request)
         response = await self.__invoke_handler(handler, request_body)
         return response
     
