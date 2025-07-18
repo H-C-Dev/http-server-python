@@ -74,7 +74,7 @@ class CustomRequest:
             return (path, query)
         
     def __client_supports_early_hints(self, user_agent: str) -> bool:
-        if EarlyHintsClient.FIREFOX.value.upper() in user_agent.upper() or EarlyHintsClient.POSTMAN.value.upper() in user_agent.upper():
+        if EarlyHintsClient.FIREFOX.value.upper() in user_agent.upper():
             return True
         return False
 
@@ -92,7 +92,7 @@ class CustomRequest:
             "path": unquote_plus(path),
             "version": version,
             "query": query,
-            "body": body,
+            "body": body.decode(self.encoding, errors='ignore'),
             "headers": headers,
             "is_early_hints_supported": is_early_hints_supported
         }
