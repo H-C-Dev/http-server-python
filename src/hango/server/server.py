@@ -88,16 +88,19 @@ class Server(HTTPServer):
         return func
 
     async def __invoke_handler(self, handler, request) -> CustomResponse:
+        wrapped = handler
+        for middleware in self._global_middlewares:
+            wrapped = middleware(wrapped)
         try:
-            if asyncio.iscoroutinefunction(handler):
-                response = await handler(request) 
+            if asyncio.iscoroutinefunction(wrapped):
+                response = await wrapped(request)
                 return response
             else:
                 if self.executor:
                     loop = asyncio.get_running_loop()
-                    return await loop.run_in_executor(self.executor, (lambda: handler(request)))
+                    return await loop.run_in_executor(self.executor, (lambda: wrapped(request)))
                 else:
-                    response = handler(request)
+                    response = wrapped(request)
                     return response
         except Exception as e:
             print(f"Error: {e}")
