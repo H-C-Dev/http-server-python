@@ -39,9 +39,20 @@ async def async_test_handler() -> CustomResponse:
 
 @server.set_hook_after_each_handler
 def log_response(request, response):
-    print('[RESPONSE]:',response)
+    print('[HOOK RESPONSE]:',response)
 
 @server.set_hook_before_each_handler
 def log_request(request):
-    print('[REQUEST]', request)
+    print('[HOOK REQUEST]', request)
 
+
+@server.set_global_middlewares
+def foo_middleware(handler):
+    async def wrapped(request):
+        print("[Middleware] mw says hello to handler for:", request)
+        response = handler(request)
+        if asyncio.iscoroutine(response):
+            response = await response
+        print("[Middleware] mw says bye to handler response:", response)
+        return response
+    return wrapped
