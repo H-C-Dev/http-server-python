@@ -1,27 +1,27 @@
 from hango.constants import http_status_codes_message, ContentType
 import json
 from dataclasses import dataclass
-
+from hango.utils import response_time
 @dataclass
 class ResponseHeaders:
     def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str = "keep-alive", cors_header: str = None):
         self.start_line = f"HTTP/1.1 {status_code} {status_message}\r\n"
         self.date = f"Date: {date}\r\n"
         self.server = f"Server: {server}\r\n"
-        self.content_type = content_type if f"Content-Type: {content_type}\r\n" else None
-        self.content_length = content_length if f"Content-Length: {str(content_length)}\r\n" else None
+        self.content_type = f"Content-Type: {content_type}\r\n" if content_type else ""
+        self.content_length = f"Content-Length: {content_length}\r\n" if content_length else ""
         self.connection = f"Connection: {connection}\r\n"
-        self.cors_header = cors_header if f"Access-Control-Allow-Origin: {cors_header}\r\n" else None
+        self.cors_header = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
     
     def return_response_headers(self):     
         return (
             self.start_line +
             self.date +
             self.server +
-            (self.content_type if self.content_type else "") +
-            (self.content_length if self.content_length else "") +
+            self.content_type +
+            self.content_length  +
             self.connection + 
-            (self.cors_header if self.cors_header else "") +
+            self.cors_header +
             "\r\n"
         )
 
@@ -52,7 +52,7 @@ class Response:
         headers = ResponseHeaders(
             status_code=self.status_code,
             status_message=http_status_codes_message[str(self.status_code)],
-            date="Mon, 01 Jan 2024 00:00:00 GMT",
+            date=response_time(),
             server="HANGO",
             content_type=self.content_type,
             content_length=content_length,
