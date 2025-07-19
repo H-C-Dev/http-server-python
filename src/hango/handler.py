@@ -1,30 +1,30 @@
-from hango.http   import CustomResponse
+from hango.http   import Response
 from hango.utils  import type_safe
 from hango.server import server
 import asyncio
 
 @server.GET("/favicon.ico")
-def catch_favicon(request) -> CustomResponse:
-    return CustomResponse(body="a favicon is detected", status_code="200")
+def catch_favicon(request) -> Response:
+    return Response(body="a favicon is detected", status_code="200")
 
 @server.GET("/test")
 @type_safe
-def return_hello_world(request) -> CustomResponse:
-    return CustomResponse(body="hello world", status_code="200")
+def return_hello_world(request) -> Response:
+    return Response(body="hello world", status_code="200")
 
 @server.GET("/data/{client_data}")
 @type_safe
-def return_client_data(request) -> CustomResponse:
+def return_client_data(request) -> Response:
     res = test_safe("hello")
     print("data received from client:", request.params)
     print(res)
-    return CustomResponse(body=request.params, status_code="200")
+    return Response(body=request.params, status_code="200")
 
 @server.POST("/post")
 @type_safe
-def post_endpoint(request) -> CustomResponse:
+def post_endpoint(request) -> Response:
     print("[Data received from client]:", request.body)
-    return CustomResponse(body="hello world from post endpoint", status_code="200")
+    return Response(body="hello world from post endpoint", status_code="200")
 
 @type_safe
 def test_safe(foo: str) -> str:
@@ -32,9 +32,9 @@ def test_safe(foo: str) -> str:
 
 @server.GET("/async-test")
 @type_safe
-async def async_test_handler(request) -> CustomResponse:
+async def async_test_handler(request) -> Response:
     await asyncio.sleep(1)  
-    return CustomResponse(body="this is from async function", status_code="200")
+    return Response(body="this is from async function", status_code="200")
 
 
 @server.set_hook_after_each_handler
@@ -53,6 +53,6 @@ def foo_middleware(handler):
         response = handler(request)
         if asyncio.iscoroutine(response):
              response = await response
-        print("[Middleware] mw says bye to handler response:", response)
+        # print("[Middleware] mw says bye to handler response:", response)
         return response
     return wrapped
