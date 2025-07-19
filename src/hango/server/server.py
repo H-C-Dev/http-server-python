@@ -1,5 +1,5 @@
 import asyncio
-from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, CustomResponse, CustomEarlyHintsResponse
+from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, Response,EarlyHintsResponse
 from hango.constants import ContentType, MethodType
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
@@ -15,26 +15,24 @@ class HTTPServer:
 
     async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
-            request = await self.parse_request(reader)
-            response = await self.handle_request(request, writer)
-            await self.__write_response(response, writer)
+            (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
+            response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
+            await self.write_response(response, writer)
         except HTTPError as http_e:
             response = self.handle_error_response(http_e)
-            await self.__write_response(response, writer)
+            await self.write_response(response, writer)
         except Exception as server_e:
             print(f'Internal Error: {server_e}')
             response = self.handle_error_response(InternalServerError())
-            await self.__write_response(response, writer)
+            await self.write_response(response, writer)
 
-    async def write_early_hints_response(self, response: bytes, writer: asyncio.StreamWriter):
+
+    async def write_response(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
         writer.write(response)
         await writer.drain()
-
-    async def __write_response(self, response: bytes, writer: asyncio.StreamWriter):
-        writer.write(response)
-        await writer.drain()
-        writer.close()
-        await writer.wait_closed()
+        if not is_early_hints:
+            writer.close()
+            await writer.wait_closed()
 
     async def init_server(self):
         server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
@@ -47,12 +45,13 @@ class HTTPServer:
         raise NotImplementedError
 
     def handle_error_response(self, http_error):
-        response = CustomResponse(
+        response = Response(
             body=http_error.message,
             content_type=ContentType.PLAIN.value,
             status_code=str(http_error.status_code)
         )
-        return response.construct_response()
+        (encoded_response, _) = response.set_encoded_response()
+        return encoded_response
 
 class Server(HTTPServer):
 
@@ -60,6 +59,10 @@ class Server(HTTPServer):
         super().__init__(host, port, backlog)
         self.router = RouteToHandler()
         self.serve_file = ServeFile()
+        self._hook_before_each_handler = []
+        self._hook_after_each_handler = []
+        self._global_middlewares = []
+
         if concurrency_model =='process':
             print('process')
             self.executor = ProcessPoolExecutor()
@@ -71,80 +74,100 @@ class Server(HTTPServer):
         else:
             raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
 
-    async def __invoke_handler(self, handler, parameter) -> CustomResponse:
+    def set_global_middlewares(self, func):
+        self._global_middlewares.append(func)
+        return func
+
+    def set_hook_before_each_handler(self, func):
+        self._hook_before_each_handler.append(func)
+        return func
+    
+    def set_hook_after_each_handler(self, func):
+        self._hook_after_each_handler.append(func)
+        return func
+
+    async def __invoke_handler(self, handler, request, local_middlewares) -> Response:
+        wrapped = handler
+        for local_middleware in local_middlewares:
+            wrapped = local_middleware(wrapped)
+
+        for middleware in self._global_middlewares:
+            wrapped = middleware(wrapped)
+        
+        
         try:
-            if asyncio.iscoroutinefunction(handler):
-                response = await handler(parameter) if parameter else await handler()
+            if asyncio.iscoroutinefunction(wrapped):
+                response = await wrapped(request)
                 return response
             else:
                 if self.executor:
                     loop = asyncio.get_running_loop()
-                    return await loop.run_in_executor(self.executor, (lambda: handler(parameter)) if parameter else handler)
+                    return await loop.run_in_executor(self.executor, (lambda: wrapped(request)))
                 else:
-                    response = handler(parameter) if parameter else handler()
+                    response = wrapped(request)
                     return response
         except Exception as e:
             print(f"Error: {e}")
-            raise BadRequest(f"{parameter}")
+            raise BadRequest(f"{request.body}")
 
-    async def parse_request(self, reader: asyncio.StreamReader):
-        return await CustomRequest().parse_request(reader)
+
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> any:
+        return await CustomRequest(router=self.router).parse_request(reader, writer)
     
-    def __extract_raw_path_and_method(self, request) -> tuple[str, str]:
-        method, path, is_early_hints_supported = request['method'], request['path'], request['is_early_hints_supported']
+    def __extract_useful_request_info(self, request) -> tuple[str, str]:
+        method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported
         return (method, path, is_early_hints_supported)
     
     async def __handle_early_hints_response(self, writer, custom_hints=[]):
-        early_hints_response = CustomEarlyHintsResponse(custom_hints)
-        response = early_hints_response.construct_early_hints_response()
-        await super().write_early_hints_response(response, writer)
-
+        early_hints_response = EarlyHintsResponse(custom_hints)
+        encoded_response, _ = early_hints_response.set_encoded_response()
+        await super().write_response(encoded_response, writer, is_early_hints=True)
+    
+    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[]) -> bytes:
+        # run the global hook before handler
+        for global_hook in self._hook_before_each_handler:
+            result = global_hook(request)
+            if asyncio.iscoroutine(result):
+                await result
         
 
-    
-    async def handle_request(self, request, writer) -> bytes:
-        (method, path, is_early_hints_supported) = self.__extract_raw_path_and_method(request)
-        if method == MethodType.GET.value:
-            response = await self.__handle_GET_request(path, writer, is_early_hints_supported)   
-            return response.construct_response()
-        elif method == MethodType.POST.value:
-            response = await self.__handle_POST_request(path, request)
-            return response.construct_response()
+
+        (method, path, is_early_hints_supported) = self.__extract_useful_request_info(request)
+
+        if method == MethodType.GET.value and is_static_prefix:
+            response = await self.__handle_GET_static_request(path, writer, is_early_hints_supported)
+        elif method == MethodType.POST.value or method == MethodType.GET.value:
+            response = await self.__invoke_handler(handler, request, local_middlewares)
         else:
             raise MethodNotAllowed(f"{method}")
-    
         
-    async def __handle_GET_request(self, path, writer, is_early_hints_supported):
-        if self.serve_file.is_static_prefix(path):
+        (encoded_response, formatted_response) = response.set_encoded_response(request.cors_header)
+
+        for global_hook in self._hook_after_each_handler:
+            result = global_hook(request, formatted_response)
+            if asyncio.iscoroutine(result):
+                await result
+            
+        return encoded_response
+    
+
+    async def __handle_GET_static_request(self, path, writer, is_early_hints_supported):
             (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
                 await self.__handle_early_hints_response(writer, hints)
-            response = CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
+            response = Response(body=file_bytes, status_code="200", content_type=content_type)
             return response
 
-        (handler, parameters) = self.router.match_handler(MethodType.GET.value, path)
-        response = await self.__invoke_handler(handler, parameters)
-        return response
     
-    def __extract_POST_request_body(self, request):
-        body = request['body'].decode(request.get('encoding', 'utf-8'))
-        return body
-    
-    async def __handle_POST_request(self, path, request):
-        handler, parameters = self.router.match_handler(MethodType.POST.value, path)
-        request_body = self.__extract_POST_request_body(request)
-        response = await self.__invoke_handler(handler, request_body)
-        return response
-    
-    def GET(self, template: str):
+    def GET(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.GET.value)
+            self.router.add_route(template, func, MethodType.GET.value, local_middlewares)
             return func
         return decorator
 
-    def POST(self, template: str):
+    def POST(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.POST.value)
+            self.router.add_route(template, func, MethodType.POST.value, local_middlewares)
             return func
         return decorator
     

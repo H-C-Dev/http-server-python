@@ -1,9 +1,13 @@
 from enum import Enum
 
+CORS=['*']
+
 http_status_codes_message = {
     "103": "Early Hints",
     "200": "OK", 
     "400": "Bad Request", 
+    "403": "Forbidden",
+    "500": "Internal Server Error",
     "404": "Not Found",
     "405": "Method Not Allowed", 
     "500": "Internal Server Error",
