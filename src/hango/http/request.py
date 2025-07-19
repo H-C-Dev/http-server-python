@@ -182,7 +182,7 @@ class CustomRequest:
         path, query = self.__extract_path_and_query(path)
         request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, cors_header=cors_header, params=None)
         if self.serve_file.is_static_prefix(path):
-            return (request, None, self.serve_file.is_static_prefix(path))
-        (handler, parameters) = self.router.match_handler(method, path)
+            return (request, None, self.serve_file.is_static_prefix(path), None)
+        (handler, parameters, local_middlewares) = self.router.match_handler(method, path)
         request.params = parameters
-        return (request, handler, False)
+        return (request, handler, False, local_middlewares)

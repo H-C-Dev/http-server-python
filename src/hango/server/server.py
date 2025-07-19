@@ -15,8 +15,8 @@ class HTTPServer:
 
     async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
-            (request, handler, is_static_prefix) = await self.parse_request(reader, writer)
-            response = await self.handle_request(request, handler, writer, is_static_prefix)
+            (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
+            response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
             await self.write_response(response, writer)
         except HTTPError as http_e:
             response = self.handle_error_response(http_e)
@@ -86,10 +86,15 @@ class Server(HTTPServer):
         self._hook_after_each_handler.append(func)
         return func
 
-    async def __invoke_handler(self, handler, request) -> Response:
+    async def __invoke_handler(self, handler, request, local_middlewares) -> Response:
         wrapped = handler
+        for local_middleware in local_middlewares:
+            wrapped = local_middleware(wrapped)
+
         for middleware in self._global_middlewares:
             wrapped = middleware(wrapped)
+        
+        
         try:
             if asyncio.iscoroutinefunction(wrapped):
                 response = await wrapped(request)
@@ -118,19 +123,21 @@ class Server(HTTPServer):
         encoded_response, _ = early_hints_response.set_encoded_response()
         await super().write_response(encoded_response, writer, is_early_hints=True)
     
-    async def handle_request(self, request, handler, writer, is_static_prefix) -> bytes:
+    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[]) -> bytes:
         # run the global hook before handler
         for global_hook in self._hook_before_each_handler:
             result = global_hook(request)
             if asyncio.iscoroutine(result):
                 await result
+        
+
 
         (method, path, is_early_hints_supported) = self.__extract_useful_request_info(request)
 
         if method == MethodType.GET.value and is_static_prefix:
             response = await self.__handle_GET_static_request(path, writer, is_early_hints_supported)
         elif method == MethodType.POST.value or method == MethodType.GET.value:
-            response = await self.__invoke_handler(handler, request)
+            response = await self.__invoke_handler(handler, request, local_middlewares)
         else:
             raise MethodNotAllowed(f"{method}")
         
@@ -152,15 +159,15 @@ class Server(HTTPServer):
             return response
 
     
-    def GET(self, template: str):
+    def GET(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.GET.value)
+            self.router.add_route(template, func, MethodType.GET.value, local_middlewares)
             return func
         return decorator
 
-    def POST(self, template: str):
+    def POST(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.POST.value)
+            self.router.add_route(template, func, MethodType.POST.value, local_middlewares)
             return func
         return decorator
     
