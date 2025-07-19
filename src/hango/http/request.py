@@ -5,9 +5,11 @@ from hango.http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
 from dataclasses import dataclass, field
 from typing import Optional
-
+from hango.constants import CORS
+from hango.http import Forbidden
+from hango.utils import ServeFile
 @dataclass
-class RequestHeader:
+class RequestHeaders:
     content_type: Optional[str] = None
     user_agent: Optional[str] = None
     accept: Optional[str] = None
@@ -55,9 +57,10 @@ class Request:
     version: str
     query: dict
     body: str
-    header: RequestHeader
+    headers: RequestHeaders
     is_early_hints_supported: bool
     params: dict = field(default_factory=dict)
+    cors_header: Optional[str] = None 
 
 
 class CustomRequest:
@@ -65,6 +68,7 @@ class CustomRequest:
         self.bufsize = bufsize
         self.encoding = encoding
         self.router = router
+        self.serve_file = ServeFile()
 
 
     async def __receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
@@ -76,11 +80,11 @@ class CustomRequest:
         return data
         
     def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
-        header, space, body = data.partition(b"\r\n\r\n")
-        return (header, body)
+        headers, space, body = data.partition(b"\r\n\r\n")
+        return (headers, body)
     
-    def __decode_header(self, header: bytes) -> str:
-        header_text = header.decode(self.encoding, errors="ignore")
+    def __decode_header(self, headers: bytes) -> str:
+        header_text = headers.decode(self.encoding, errors="ignore")
         return header_text
     
     def __split_header_text(self, header_text: str) -> list[str]:
@@ -89,9 +93,10 @@ class CustomRequest:
 
     async def __extract_request_lines_and_body(self, reader: asyncio.StreamReader) -> tuple[bytes, list[str]]:
         data = await self.__receive_byte_data(reader)
-        header, body = self.__separate_lines_and_body(data)
-        header_text = self.__decode_header(header)
+        headers, body = self.__separate_lines_and_body(data)
+        header_text = self.__decode_header(headers)
         lines = self.__split_header_text(header_text)
+        
         return (body, lines)
     
     def __check_http_version(self, version):
@@ -105,32 +110,47 @@ class CustomRequest:
     
 
 
+
     
     def __parse_headers(self, lines):
-        header = RequestHeader()
+        headers = RequestHeaders()
         setter_map = {
-            "content-type": header.set_content_type,
-            "user-agent": header.set_user_agent,
-            "accept": header.set_accept,
-            "host": header.set_host,
-            "accept-encoding": header.set_accept_encoding,
-            "connection": header.set_connection,
-            "content-length": header.set_content_length 
+            "content-type": headers.set_content_type,
+            "user-agent": headers.set_user_agent,
+            "accept": headers.set_accept,
+            "host": headers.set_host,
+            "accept-encoding": headers.set_accept_encoding,
+            "connection": headers.set_connection,
+            "content-length": headers.set_content_length 
         }
         for line in lines[1:]:
             if not line:
                 continue
             name, value = line.split(":", 1)
             name = name.strip().lower()
-            value = value.strip()
+            value = value.lstrip()
             if setter_map.get(name):
                 setter_map[name](value)
 
-        return (header)
+        return (headers)
     
     
-    async def __extract_body(self, body, header, reader: asyncio.StreamReader):
-        content_length = int(header.content_length) if header.content_length != None else 0
+    def __check_CORS(self, host: str, writer: asyncio.StreamWriter, user_agent: str):
+        if 'mozilla' in user_agent.lower() or 'chrome' in user_agent.lower() or 'safari' in user_agent.lower():
+            peer_ip, _ = writer.get_extra_info('peername')
+            if peer_ip in ('127.0.0.1', '::1'):
+                return None
+            elif '*' in CORS:
+                return "*"
+            elif 'http://' + host in CORS: 
+                return 'http://' + host
+            elif 'https://' + host in CORS:
+                return 'https://' + host
+            raise Forbidden(message=f"Host {host} is not allowed to access this resource. CORS policy is validated.")
+
+
+    async def __extract_body(self, body, headers, reader: asyncio.StreamReader):
+        content_length = int(headers.content_length) if headers.content_length != None else 0
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < content_length:
             body += await reader.read(self.bufsize)
@@ -152,15 +172,17 @@ class CustomRequest:
             return True
         return False
 
-    async def parse_request(self, reader: asyncio.StreamReader) -> any:
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> any:
         body, lines = await self.__extract_request_lines_and_body(reader)
         method, path, version = self.__extract_request_line(lines)
-        header = self.__parse_headers(lines)
-
-        is_early_hints_supported = self.__client_supports_early_hints(header.user_agent)
-        body = await self.__extract_body(body, header, reader)
+        headers = self.__parse_headers(lines)
+        cors_header = self.__check_CORS(headers.host, writer, headers.user_agent)
+        is_early_hints_supported = self.__client_supports_early_hints(headers.user_agent)
+        body = await self.__extract_body(body, headers, reader)
         path, query = self.__extract_path_and_query(path)
+        request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, cors_header=cors_header, params=None)
+        if self.serve_file.is_static_prefix(path):
+            return (request, None, self.serve_file.is_static_prefix(path))
         (handler, parameters) = self.router.match_handler(method, path)
-
-        request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), header, is_early_hints_supported, parameters)
-        return (request, handler)
+        request.params = parameters
+        return (request, handler, False)
