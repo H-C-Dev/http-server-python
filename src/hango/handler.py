@@ -3,11 +3,34 @@ from hango.utils  import type_safe
 from hango.server import server
 import asyncio
 
+
+@server.set_global_middlewares
+def foo_middleware(handler):
+    async def wrapped(request):
+        print("[Middleware] mw says hello to handler for:", request)
+        response = handler(request)
+        if asyncio.iscoroutine(response):
+             response = await response
+        # print("[Middleware] mw says bye to handler response:", response)
+        return response
+    return wrapped
+
+
+def local_middleware(handler):
+    async def wrapped(request):
+        print("[LOCAL Middleware] mw says hello to handler for:", request)
+        response = handler(request)
+        if asyncio.iscoroutine(response):
+             response = await response
+        return response
+    return wrapped
+
+
 @server.GET("/favicon.ico")
 def catch_favicon(request) -> Response:
     return Response(body="a favicon is detected", status_code="200")
 
-@server.GET("/test")
+@server.GET("/test", local_middlewares=[local_middleware])
 @type_safe
 def return_hello_world(request) -> Response:
     return Response(body="hello world", status_code="200")
@@ -46,13 +69,4 @@ def log_request(request):
     print('[HOOK REQUEST]', request)
 
 
-@server.set_global_middlewares
-def foo_middleware(handler):
-    async def wrapped(request):
-        print("[Middleware] mw says hello to handler for:", request)
-        response = handler(request)
-        if asyncio.iscoroutine(response):
-             response = await response
-        # print("[Middleware] mw says bye to handler response:", response)
-        return response
-    return wrapped
+
