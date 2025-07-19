@@ -1,5 +1,5 @@
 import asyncio
-from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, CustomResponse, CustomEarlyHintsResponse
+from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, Response,EarlyHintsResponse
 from hango.constants import ContentType, MethodType
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
@@ -15,26 +15,24 @@ class HTTPServer:
 
     async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
-            (request, handler) = await self.parse_request(reader)
-            response = await self.handle_request(request, handler, writer)
-            await self.__write_response(response, writer)
+            (request, handler, is_static_prefix) = await self.parse_request(reader, writer)
+            response = await self.handle_request(request, handler, writer, is_static_prefix)
+            await self.write_response(response, writer)
         except HTTPError as http_e:
             response = self.handle_error_response(http_e)
-            await self.__write_response(response, writer)
+            await self.write_response(response, writer)
         except Exception as server_e:
             print(f'Internal Error: {server_e}')
             response = self.handle_error_response(InternalServerError())
-            await self.__write_response(response, writer)
+            await self.write_response(response, writer)
 
-    async def write_early_hints_response(self, response: bytes, writer: asyncio.StreamWriter):
+
+    async def write_response(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
         writer.write(response)
         await writer.drain()
-
-    async def __write_response(self, response: bytes, writer: asyncio.StreamWriter):
-        writer.write(response)
-        await writer.drain()
-        writer.close()
-        await writer.wait_closed()
+        if not is_early_hints:
+            writer.close()
+            await writer.wait_closed()
 
     async def init_server(self):
         server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
@@ -47,13 +45,13 @@ class HTTPServer:
         raise NotImplementedError
 
     def handle_error_response(self, http_error):
-        response = CustomResponse(
+        response = Response(
             body=http_error.message,
             content_type=ContentType.PLAIN.value,
             status_code=str(http_error.status_code)
         )
-        (formatted_response, dict_response) = response.construct_response()
-        return formatted_response
+        (encoded_response, _) = response.set_encoded_response()
+        return encoded_response
 
 class Server(HTTPServer):
 
@@ -88,7 +86,7 @@ class Server(HTTPServer):
         self._hook_after_each_handler.append(func)
         return func
 
-    async def __invoke_handler(self, handler, request) -> CustomResponse:
+    async def __invoke_handler(self, handler, request) -> Response:
         wrapped = handler
         for middleware in self._global_middlewares:
             wrapped = middleware(wrapped)
@@ -108,20 +106,19 @@ class Server(HTTPServer):
             raise BadRequest(f"{request.body}")
 
 
-    async def parse_request(self, reader: asyncio.StreamReader):
-        return await CustomRequest(router=self.router).parse_request(reader)
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> any:
+        return await CustomRequest(router=self.router).parse_request(reader, writer)
     
     def __extract_useful_request_info(self, request) -> tuple[str, str]:
         method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported
         return (method, path, is_early_hints_supported)
     
     async def __handle_early_hints_response(self, writer, custom_hints=[]):
-        early_hints_response = CustomEarlyHintsResponse(custom_hints)
-        response = early_hints_response.construct_early_hints_response()
-        await super().write_early_hints_response(response, writer)
+        early_hints_response = EarlyHintsResponse(custom_hints)
+        encoded_response, _ = early_hints_response.set_encoded_response()
+        await super().write_response(encoded_response, writer, is_early_hints=True)
     
-    
-    async def handle_request(self, request, handler, writer) -> bytes:
+    async def handle_request(self, request, handler, writer, is_static_prefix) -> bytes:
         # run the global hook before handler
         for global_hook in self._hook_before_each_handler:
             result = global_hook(request)
@@ -129,27 +126,29 @@ class Server(HTTPServer):
                 await result
 
         (method, path, is_early_hints_supported) = self.__extract_useful_request_info(request)
-        if method == MethodType.GET.value and self.serve_file.is_static_prefix(path):
+
+        if method == MethodType.GET.value and is_static_prefix:
             response = await self.__handle_GET_static_request(path, writer, is_early_hints_supported)
         elif method == MethodType.POST.value or method == MethodType.GET.value:
             response = await self.__invoke_handler(handler, request)
         else:
             raise MethodNotAllowed(f"{method}")
-        (formatted_response, dict_response) = response.construct_response()
+        
+        (encoded_response, formatted_response) = response.set_encoded_response(request.cors_header)
 
         for global_hook in self._hook_after_each_handler:
-            result = global_hook(request, dict_response)
+            result = global_hook(request, formatted_response)
             if asyncio.iscoroutine(result):
                 await result
             
-        return formatted_response
+        return encoded_response
     
 
     async def __handle_GET_static_request(self, path, writer, is_early_hints_supported):
             (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
                 await self.__handle_early_hints_response(writer, hints)
-            response = CustomResponse(body=file_bytes, status_code="200", content_type=content_type)
+            response = Response(body=file_bytes, status_code="200", content_type=content_type)
             return response
 
     
