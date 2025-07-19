@@ -3,7 +3,7 @@ import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
-
+from dataclasses import dataclass
 class CustomRequest:
     def __init__(self, router: RouteToHandler, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
@@ -90,14 +90,30 @@ class CustomRequest:
         path, query = self.__extract_path_and_query(path)
         (handler, parameters) = self.router.match_handler(method, path)
 
-        request = {
-            "method": method,
-            "path": unquote_plus(path),
-            "version": version,
-            "query": query,
-            "body": body.decode(self.encoding, errors='ignore'),
-            "headers": headers,
-            "is_early_hints_supported": is_early_hints_supported,
-            "params": parameters or None,
-        }
+        # request = {
+        #     "method": method,
+        #     "path": unquote_plus(path),
+        #     "version": version,
+        #     "query": query,
+        #     "body": body.decode(self.encoding, errors='ignore'),
+        #     "headers": headers,
+        #     "is_early_hints_supported": is_early_hints_supported,
+        #     "params": parameters or None,
+        # }
+
+        request = Request(method, path, version, query, body, headers, is_early_hints_supported, parameters)
         return (request, handler)
+
+@dataclass
+class Request:
+    method: str
+    path: str
+    version: str
+    query: dict
+    body: str
+    headers: str
+    is_early_hints_supported: bool
+    params: dict
+
+
+        

@@ -16,14 +16,14 @@ def return_hello_world(request) -> CustomResponse:
 @type_safe
 def return_client_data(request) -> CustomResponse:
     res = test_safe("hello")
-    print("data received from client:", request['params'])
+    print("data received from client:", request.params)
     print(res)
-    return CustomResponse(body=request['params'], status_code="200")
+    return CustomResponse(body=request.params, status_code="200")
 
 @server.POST("/post")
 @type_safe
 def post_endpoint(request) -> CustomResponse:
-    print("[Data received from client]:", request['body'])
+    print("[Data received from client]:", request.body)
     return CustomResponse(body="hello world from post endpoint", status_code="200")
 
 @type_safe

@@ -105,14 +105,14 @@ class Server(HTTPServer):
                     return response
         except Exception as e:
             print(f"Error: {e}")
-            raise BadRequest(f"{request['body']}")
+            raise BadRequest(f"{request.body}")
 
 
     async def parse_request(self, reader: asyncio.StreamReader):
         return await CustomRequest(router=self.router).parse_request(reader)
     
     def __extract_useful_request_info(self, request) -> tuple[str, str]:
-        method, path, is_early_hints_supported = request['method'], request['path'],request['is_early_hints_supported']
+        method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported
         return (method, path, is_early_hints_supported)
     
     async def __handle_early_hints_response(self, writer, custom_hints=[]):
