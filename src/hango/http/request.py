@@ -3,7 +3,63 @@ import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
+
+@dataclass
+class RequestHeader:
+    content_type: Optional[str] = None
+    user_agent: Optional[str] = None
+    accept: Optional[str] = None
+    host: Optional[str] = None
+    accept_encoding: Optional[str] = None
+    connection: Optional[str] = None
+    content_length: Optional[str] = None
+
+    def set_content_type(self, content_type: str):
+        self.content_type = content_type
+
+    def set_user_agent(self, user_agent: str):
+        self.user_agent = user_agent
+    
+    def set_accept(self, accept: str):
+        self.accept = accept
+
+    def set_host(self, host: str):
+        self.host = host
+    
+    def set_accept_encoding(self, accept_encoding: str):
+        self.accept_encoding = accept_encoding
+    
+    def set_connection(self, connection: str):
+        self.connection = connection
+    
+    def set_content_length(self, content_length: str):
+        self.content_length = content_length
+
+    def get_header(self) -> dict:
+        return {
+            "content_type": self.content_type,
+            "user_agent": self.user_agent,
+            "accept": self.accept,
+            "host": self.host,
+            "accept_encoding": self.accept_encoding,
+            "connection": self.connection,
+            "content_length": self.content_length
+        }
+    
+@dataclass
+class Request:
+    method: str
+    path: str
+    version: str
+    query: dict
+    body: str
+    header: RequestHeader
+    is_early_hints_supported: bool
+    params: dict = field(default_factory=dict)
+
+
 class CustomRequest:
     def __init__(self, router: RouteToHandler, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
@@ -47,18 +103,34 @@ class CustomRequest:
         self.__check_http_version(version)
         return (method, path, version)
     
+
+
+    
     def __parse_headers(self, lines):
-        headers = dict()
+        header = RequestHeader()
+        setter_map = {
+            "content-type": header.set_content_type,
+            "user-agent": header.set_user_agent,
+            "accept": header.set_accept,
+            "host": header.set_host,
+            "accept-encoding": header.set_accept_encoding,
+            "connection": header.set_connection,
+            "content-length": header.set_content_length 
+        }
         for line in lines[1:]:
             if not line:
                 continue
             name, value = line.split(":", 1)
-            headers[name.strip().lower()] = value.lstrip()
+            name = name.strip().lower()
+            value = value.strip()
+            if setter_map.get(name):
+                setter_map[name](value)
 
-        return headers
+        return (header)
     
-    async def __extract_body(self, body, headers, reader: asyncio.StreamReader):
-        content_length = int(headers.get("content-length", "0"))
+    
+    async def __extract_body(self, body, header, reader: asyncio.StreamReader):
+        content_length = int(header.content_length) if header.content_length != None else 0
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < content_length:
             body += await reader.read(self.bufsize)
@@ -82,38 +154,13 @@ class CustomRequest:
 
     async def parse_request(self, reader: asyncio.StreamReader) -> any:
         body, lines = await self.__extract_request_lines_and_body(reader)
-        # http method, path and http version in the requestLine
         method, path, version = self.__extract_request_line(lines)
-        headers = self.__parse_headers(lines)
-        is_early_hints_supported = self.__client_supports_early_hints(headers['user-agent'])
-        body = await self.__extract_body(body, headers, reader)
+        header = self.__parse_headers(lines)
+
+        is_early_hints_supported = self.__client_supports_early_hints(header.user_agent)
+        body = await self.__extract_body(body, header, reader)
         path, query = self.__extract_path_and_query(path)
         (handler, parameters) = self.router.match_handler(method, path)
 
-        # request = {
-        #     "method": method,
-        #     "path": unquote_plus(path),
-        #     "version": version,
-        #     "query": query,
-        #     "body": body.decode(self.encoding, errors='ignore'),
-        #     "headers": headers,
-        #     "is_early_hints_supported": is_early_hints_supported,
-        #     "params": parameters or None,
-        # }
-
-        request = Request(method, path, version, query, body, headers, is_early_hints_supported, parameters)
+        request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), header, is_early_hints_supported, parameters)
         return (request, handler)
-
-@dataclass
-class Request:
-    method: str
-    path: str
-    version: str
-    query: dict
-    body: str
-    headers: str
-    is_early_hints_supported: bool
-    params: dict
-
-
-        
