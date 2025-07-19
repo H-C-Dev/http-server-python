@@ -60,7 +60,7 @@ class Request:
     headers: RequestHeaders
     is_early_hints_supported: bool
     params: dict = field(default_factory=dict)
-    cors_header: Optional[str] = None 
+    is_localhost: bool = False
 
 
 class CustomRequest:
@@ -77,6 +77,7 @@ class CustomRequest:
         except asyncio.IncompleteReadError as e:
             # return what was read if the stream closed before \r\n\r\n
             return e.partial
+        print('[RECEIVED DATA]', data)
         return data
         
     def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
@@ -135,18 +136,12 @@ class CustomRequest:
         return (headers)
     
     
-    def __check_CORS(self, host: str, writer: asyncio.StreamWriter, user_agent: str):
-        if 'mozilla' in user_agent.lower() or 'chrome' in user_agent.lower() or 'safari' in user_agent.lower():
-            peer_ip, _ = writer.get_extra_info('peername')
-            if peer_ip in ('127.0.0.1', '::1'):
-                return None
-            elif '*' in CORS:
-                return "*"
-            elif 'http://' + host in CORS: 
-                return 'http://' + host
-            elif 'https://' + host in CORS:
-                return 'https://' + host
-            raise Forbidden(message=f"Host {host} is not allowed to access this resource. CORS policy is validated.")
+
+    def __is_client_localhost(self, writer: asyncio.StreamWriter) -> str:
+        peer_ip, _ = writer.get_extra_info('peername')
+        if peer_ip in ('127.0.0.1', '::1'):
+                return True
+        return False
 
 
     async def __extract_body(self, body, headers, reader: asyncio.StreamReader):
@@ -176,11 +171,11 @@ class CustomRequest:
         body, lines = await self.__extract_request_lines_and_body(reader)
         method, path, version = self.__extract_request_line(lines)
         headers = self.__parse_headers(lines)
-        cors_header = self.__check_CORS(headers.host, writer, headers.user_agent)
         is_early_hints_supported = self.__client_supports_early_hints(headers.user_agent)
         body = await self.__extract_body(body, headers, reader)
         path, query = self.__extract_path_and_query(path)
-        request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, cors_header=cors_header, params=None)
+        is_localhost = self.__is_client_localhost(writer)
+        request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
         if self.serve_file.is_static_prefix(path):
             return (request, None, self.serve_file.is_static_prefix(path), None)
         (handler, parameters, local_middlewares) = self.router.match_handler(method, path)

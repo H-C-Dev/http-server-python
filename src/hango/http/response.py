@@ -37,8 +37,9 @@ class Response:
                              else ContentType.JSON.value if isinstance(body, (dict, list))
                              else ContentType.PLAIN.value if body == None
                              else None)
+        self.cors_header = None
         
-    def set_headers(self, cors_header):
+    def set_headers(self):
         if not http_status_codes_message[str(self.status_code)]:
             raise ValueError(f"Invalid status code: {self.status_code}")
         
@@ -56,13 +57,13 @@ class Response:
             server="HANGO",
             content_type=self.content_type,
             content_length=content_length,
-            cors_header= cors_header if cors_header else None
+            cors_header= self.cors_header if self.cors_header else None
         )
         self.headers = headers
         
 
-    def set_encoded_response(self, cors_header=None) -> bytes:
-        self.set_headers(cors_header)
+    def set_encoded_response(self) -> bytes:
+        self.set_headers()
         if isinstance(self.body, bytes):
             encoded_response = self.headers.return_response_headers().encode(self.encoding) + self.body 
             formatted_response = self.headers.return_response_headers() + "Body is a bytes object"
@@ -82,11 +83,7 @@ class EarlyHintsResponse(Response):
         for hint in self.hints:
             early_hints_header += f"Link: <{hint['url']}>; rel={hint['rel']}; as={hint['as']}; type={hint['type']}\r\n"
         early_hints_header += "\r\n"
-        print('[EARLY HINTS HEADER]')
-        print(self.headers.connection)
-        print(self.headers.content_type)
-        print(self.headers.content_length)
-        print(self.headers.date)
+     
         formatted_response = self.headers.return_response_headers()[:-4] + early_hints_header
         print('[FORMATTED EARLY HINTS RESPONSE]', formatted_response)
         print(type(formatted_response))
