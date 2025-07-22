@@ -1,5 +1,5 @@
 from hango.http   import Response
-from hango.utils  import type_safe
+from hango.core  import type_safe
 from hango.server import server
 import asyncio
 
