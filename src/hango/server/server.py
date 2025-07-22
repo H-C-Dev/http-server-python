@@ -1,6 +1,6 @@
 import asyncio
 from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, Response,EarlyHintsResponse, Forbidden
-from hango.constants import ContentType, MethodType, CORS
+from hango.core import ContentType, MethodType, CORS
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor

@@ -1,7 +1,7 @@
 import os
-from hango.config import STATIC_ROOT, SERVER_ROOT
+from hango.core import STATIC_ROOT, SERVER_ROOT
 from hango.http import NotFound, InternalServerError
-from hango.constants import EXTENSION_TO_MIME
+from hango.core import EXTENSION_TO_MIME
 import re
 
 class ServeFile:

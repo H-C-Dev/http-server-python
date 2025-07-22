@@ -1,11 +1,11 @@
-from hango.constants import EarlyHintsClient
+from hango.core import EarlyHintsClient
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
 from dataclasses import dataclass, field
 from typing import Optional
-from hango.constants import CORS
+from hango.core import CORS
 from hango.http import Forbidden
 from hango.utils import ServeFile
 @dataclass
