@@ -4,7 +4,7 @@ from hango.core import ContentType, MethodType, CORS
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-
+from typing import Tuple, Any
 PORT=8080
 
 class HTTPServer:
@@ -39,10 +39,10 @@ class HTTPServer:
         server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
         return server
 
-    async def parse_request(self, reader: asyncio.StreamReader):
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         raise NotImplementedError
 
-    async def handle_request(self, request, writer):
+    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares):
         raise NotImplementedError
 
     def handle_error_response(self, http_error):
@@ -112,10 +112,10 @@ class Server(HTTPServer):
             raise BadRequest(f"{request.body}")
 
 
-    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> any:
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> CustomRequest:
         return await CustomRequest(router=self.router).parse_request(reader, writer)
     
-    def __extract_useful_request_info(self, request) -> tuple[str, str]:
+    def __extract_useful_request_info(self, request) -> tuple[str, str, bool]:
         method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported
         return (method, path, is_early_hints_supported)
     

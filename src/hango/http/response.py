@@ -2,7 +2,7 @@ from hango.core import http_status_codes_message, ContentType
 import json
 from dataclasses import dataclass
 from hango.utils import response_time
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
     def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str = "keep-alive", cors_header: Optional[str] = None):
@@ -29,9 +29,9 @@ class ResponseHeaders:
 
 @dataclass
 class Response:
-    def __init__(self, status_code: int, content_type: Optional[str] = None, body: Optional[str] = None):
+    def __init__(self, status_code: Union[int, str], content_type: Optional[str] = None, body: Optional[str] = None):
         self.encoding = 'utf-8'
-        self.status_code: int = status_code
+        self.status_code: Union[int, str] = status_code
         self.headers: Optional[ResponseHeaders] = None
         self.body: Optional[str] = json.dumps(body) if isinstance(body, (dict, list)) else body 
         self.content_type = (content_type if content_type
