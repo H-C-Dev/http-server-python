@@ -14,13 +14,13 @@ def http_server():
 @pytest.fixture
 
 
-def test__invoke_handler(server):
+def test_invoke_handler(server):
     mock_value = "testing..."
 
     def mock_handler(text):
         return CustomResponse(body=text, status_code="200")
     expected_response = CustomResponse(body=mock_value, status_code="200")
-    actual_response = server._Server__invoke_handler(mock_handler, mock_value)
+    actual_response = server._Server_invoke_handler(mock_handler, mock_value)
 
     assert actual_response.body == expected_response.body
     assert actual_response.status_code == expected_response.status_code

@@ -14,7 +14,7 @@ class HTTPServer:
         self.backlog = backlog
 
 
-    async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
             (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
             response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
@@ -36,7 +36,7 @@ class HTTPServer:
             await writer.wait_closed()
 
     async def init_server(self):
-        server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
+        server = await asyncio.start_server(client_connected_cb=self._handle_client, host=self.host, port=self.port) 
         return server
 
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
@@ -87,7 +87,7 @@ class Server(HTTPServer):
         self._hook_after_each_handler.append(func)
         return func
 
-    async def __invoke_handler(self, handler, request, local_middlewares) -> Response:
+    async def _invoke_handler(self, handler, request, local_middlewares) -> Response:
         wrapped = handler
         for local_middleware in local_middlewares:
             wrapped = local_middleware(wrapped)
@@ -115,11 +115,11 @@ class Server(HTTPServer):
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> HTTPRequestParser:
         return await HTTPRequestParser(router=self.router).parse_request(reader, writer)
     
-    def __extract_useful_request_info(self, request) -> tuple[str, str, bool]:
+    def _extract_method_path(self, request) -> tuple[str, str, bool]:
         method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported
         return (method, path, is_early_hints_supported)
     
-    async def __handle_early_hints_response(self, writer, custom_hints=[]):
+    async def _handle_early_hints_response(self, writer, custom_hints=[]):
         early_hints_response = EarlyHintsResponse(custom_hints)
         encoded_response, _ = early_hints_response.set_encoded_response()
         await super().write_response(encoded_response, writer, is_early_hints=True)
@@ -133,12 +133,12 @@ class Server(HTTPServer):
         
 
 
-        (method, path, is_early_hints_supported) = self.__extract_useful_request_info(request)
+        (method, path, is_early_hints_supported) = self._extract_method_path(request)
 
         if method == MethodType.GET.value and is_static_prefix:
-            response = await self.__handle_GET_static_request(path, writer, is_early_hints_supported)
+            response = await self._handle_static_request(path, writer, is_early_hints_supported)
         elif method == MethodType.POST.value or method == MethodType.GET.value:
-            response = await self.__invoke_handler(handler, request, local_middlewares)
+            response = await self._invoke_handler(handler, request, local_middlewares)
         else:
             raise MethodNotAllowed(f"{method}")
         
@@ -152,10 +152,10 @@ class Server(HTTPServer):
         return encoded_response
     
 
-    async def __handle_GET_static_request(self, path, writer, is_early_hints_supported):
+    async def _handle_static_request(self, path, writer, is_early_hints_supported):
             (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
-                await self.__handle_early_hints_response(writer, hints)
+                await self._handle_early_hints_response(writer, hints)
             response = Response(body=file_bytes, status_code="200", content_type=content_type)
             return response
 
