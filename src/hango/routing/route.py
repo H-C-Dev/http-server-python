@@ -13,17 +13,17 @@ class RouteToHandler:
         self._routes = []
         self._extract_params_helper = ExtractParams()
 
-    def add_route(self, template, handler, method, local_middlewares=[]):
-        self._routes.append(Route(template, handler, method, local_middlewares))
-
-    def __extract_params(self, path, template):
+    def _extract_params(self, path, template):
         parameters = self._extract_params_helper.extract_path_params(path, template)
         return parameters
+    
+    def add_route(self, template, handler, method, local_middlewares=[]):
+        self._routes.append(Route(template, handler, method, local_middlewares))
 
     def match_handler(self, method, path):
         for route in self._routes:
             if route.method.upper() == method.upper():
-                parameters = self.__extract_params(path, route.template)
+                parameters = self._extract_params(path, route.template)
                 if isinstance(parameters, dict):
                     return (route.handler, parameters, route.local_middlewares)
         raise NotFound(f"{method} {path} Not Found")
