@@ -1,3 +1,4 @@
+from typing import Tuple
 import os
 from hango.core import STATIC_ROOT, SERVER_ROOT
 from hango.http import NotFound, InternalServerError
@@ -52,7 +53,7 @@ class ServeFile:
         if os.path.commonpath([formatted_path, STATIC_ROOT]) != STATIC_ROOT:
             raise NotFound(f"{formatted_path} Not Found")
 
-    def __get_file_content_type(self, path) -> str:
+    def __get_file_content_type(self, path) -> Tuple[str, bool]:
         i = len(path) - 1
         isHtml = False
         while i >= 0:
@@ -83,7 +84,7 @@ class ServeFile:
                 file.extend(file_chunk)
         return bytes(file)
     
-    def __is_file_present(self, path: str) -> str:
+    def __is_file_present(self, path: str) -> Tuple[bool, str]:
         formatted_path = self.__formatted_path(path)
         self.__check_common_path(formatted_path)
         is_File = os.path.isfile(formatted_path)
@@ -136,7 +137,7 @@ class ServeFile:
         hints = self.__extract_early_hints(html)
         return hints
 
-    def serve_static_file(self, path: str) -> bytes:
+    def serve_static_file(self, path: str) -> Tuple[bytes, str, list]:
         (is_File, concat_path) = self.__is_file_present(path)
         if is_File:
             file_bytes = self.__pick_file(concat_path)
