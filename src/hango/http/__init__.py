@@ -9,7 +9,7 @@ from .http_error import (
     InternalServerError,
     HTTPVersionNotSupported,
 )
-from .request import CustomRequest
+from .request import HTTPRequestParser
 from .response import Response, EarlyHintsResponse
 
 __all__ = [
@@ -22,7 +22,7 @@ __all__ = [
     "MethodNotAllowed",
     "InternalServerError",
     "HTTPVersionNotSupported",
-    "CustomRequest",
+    "HTTPRequestParser",
     "CustomResponse",
     "CustomEarlyHintsResponse"
     "Response",

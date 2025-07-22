@@ -1,5 +1,5 @@
 import asyncio
-from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, Response,EarlyHintsResponse, Forbidden
+from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response,EarlyHintsResponse, Forbidden
 from hango.core import ContentType, MethodType, CORS
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
@@ -112,8 +112,8 @@ class Server(HTTPServer):
             raise BadRequest(f"{request.body}")
 
 
-    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> CustomRequest:
-        return await CustomRequest(router=self.router).parse_request(reader, writer)
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> HTTPRequestParser:
+        return await HTTPRequestParser(router=self.router).parse_request(reader, writer)
     
     def __extract_useful_request_info(self, request) -> tuple[str, str, bool]:
         method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported

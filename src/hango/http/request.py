@@ -63,7 +63,7 @@ class Request:
     is_localhost: bool = False
 
 
-class CustomRequest:
+class HTTPRequestParser:
     def __init__(self, router: RouteToHandler, bufsize: int = 4096, encoding: str = 'utf-8'):
         self.bufsize = bufsize
         self.encoding = encoding
