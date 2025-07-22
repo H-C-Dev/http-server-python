@@ -4,7 +4,7 @@ from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Optional, Any
 from hango.core import CORS
 from hango.http import Forbidden
 from hango.utils import ServeFile
@@ -59,7 +59,7 @@ class Request:
     body: str
     headers: RequestHeaders
     is_early_hints_supported: bool
-    params: dict = field(default_factory=dict)
+    params: Optional[dict] = field(default_factory=dict)
     is_localhost: bool = False
 
 
@@ -137,7 +137,7 @@ class CustomRequest:
     
     
 
-    def __is_client_localhost(self, writer: asyncio.StreamWriter) -> str:
+    def __is_client_localhost(self, writer: asyncio.StreamWriter) -> bool:
         peer_ip, _ = writer.get_extra_info('peername')
         if peer_ip in ('127.0.0.1', '::1'):
                 return True
@@ -167,7 +167,7 @@ class CustomRequest:
             return True
         return False
 
-    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> any:
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Any:
         body, lines = await self.__extract_request_lines_and_body(reader)
         method, path, version = self.__extract_request_line(lines)
         headers = self.__parse_headers(lines)
