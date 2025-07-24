@@ -1,10 +1,11 @@
 import asyncio
 from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response,EarlyHintsResponse, Forbidden
-from hango.core import ContentType, MethodType, CORS
+from hango.core import ContentType, MethodType, CORS, ServiceContainer
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Tuple, Any
+
 PORT=8080
 
 class HTTPServer:
@@ -56,8 +57,9 @@ class HTTPServer:
 
 class Server(HTTPServer):
 
-    def __init__(self, host, port, backlog=5, concurrency_model=''):
+    def __init__(self, host, port, backlog=5, concurrency_model='', container=None):
         super().__init__(host, port, backlog)
+        self.container = container or ServiceContainer()
         self.router = RouteToHandler()
         self.serve_file = ServeFile()
         self._hook_before_each_handler = []
@@ -74,6 +76,11 @@ class Server(HTTPServer):
             self.executor = None
         else:
             raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
+
+        self.container.register(RouteToHandler, self.router)
+        self.container.register(ServeFile, self.serve_file)
+        if self.executor:
+            self.container.register(type(self.executor), self.executor)
 
     def set_global_middlewares(self, func):
         self._global_middlewares.append(func)
@@ -113,7 +120,7 @@ class Server(HTTPServer):
 
 
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> HTTPRequestParser:
-        return await HTTPRequestParser(router=self.router).parse_request(reader, writer)
+        return await HTTPRequestParser(container=self.container).parse_request(reader, writer)
     
     def _extract_method_path(self, request) -> tuple[str, str, bool]:
         method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported
@@ -173,9 +180,10 @@ class Server(HTTPServer):
         return decorator
     
 
+container = ServiceContainer()
 
 
-server = Server("0.0.0.0", PORT, concurrency_model='')
+server = Server("0.0.0.0", PORT, concurrency_model='', container=container)
 
 @server.set_global_middlewares
 def cors_middleware(handler):
