@@ -1,4 +1,4 @@
-from hango.core import EarlyHintsClient
+from hango.core import EarlyHintsClient, ServiceContainer
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
@@ -8,6 +8,7 @@ from typing import Optional, Any
 from hango.core import CORS
 from hango.http import Forbidden
 from hango.utils import ServeFile
+
 @dataclass
 class RequestHeaders:
     content_type: Optional[str] = None
@@ -64,11 +65,14 @@ class Request:
 
 
 class HTTPRequestParser:
-    def __init__(self, router: RouteToHandler, bufsize: int = 4096, encoding: str = 'utf-8'):
+    def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8', container=None):
+        if container is None:
+            raise RuntimeError("HTTPRequestParser requires a ServiceContainer")
+        self.container = container 
         self.bufsize = bufsize
         self.encoding = encoding
-        self.router = router
-        self.serve_file = ServeFile()
+        # self.serve_file = ServeFile()
+
 
 
     async def _receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
@@ -176,8 +180,9 @@ class HTTPRequestParser:
         path, query = self._extract_path_and_query(path)
         is_localhost = self._is_client_localhost(writer)
         request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
-        if self.serve_file.is_static_prefix(path):
-            return (request, None, self.serve_file.is_static_prefix(path), None)
-        (handler, parameters, local_middlewares) = self.router.match_handler(method, path)
+        serve_file = self.container.get(ServeFile)
+        if serve_file.is_static_prefix(path):
+            return (request, None, serve_file.is_static_prefix(path), None)
+        (handler, parameters, local_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
         request.params = parameters
         return (request, handler, False, local_middlewares)
