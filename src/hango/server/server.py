@@ -5,6 +5,7 @@ from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Tuple, Any
+from hango.middleware import MiddlewareChain
 
 PORT=8080
 
@@ -64,7 +65,7 @@ class Server(HTTPServer):
         self.serve_file = ServeFile()
         self._hook_before_each_handler = []
         self._hook_after_each_handler = []
-        self._global_middlewares = []
+        self._middlewarewares = MiddlewareChain()
 
         if concurrency_model =='process':
             print('process')
@@ -81,28 +82,23 @@ class Server(HTTPServer):
         self.container.register(ServeFile, self.serve_file)
         if self.executor:
             self.container.register(type(self.executor), self.executor)
+        
+        self.container.register(MiddlewareChain, self._middlewarewares)
 
     def set_global_middlewares(self, func):
-        self._global_middlewares.append(func)
+        self.container.get(MiddlewareChain).add_middleware(func)
         return func
 
     def set_hook_before_each_handler(self, func):
-        self._hook_before_each_handler.append(func)
+        self.container.get(MiddlewareChain).add_hook_before_each_handler(func)
         return func
     
     def set_hook_after_each_handler(self, func):
-        self._hook_after_each_handler.append(func)
+        self.container.get(MiddlewareChain).add_hook_after_each_handler(func)
         return func
 
     async def _invoke_handler(self, handler, request, local_middlewares) -> Response:
-        wrapped = handler
-        for local_middleware in local_middlewares:
-            wrapped = local_middleware(wrapped)
-
-        for middleware in self._global_middlewares:
-            wrapped = middleware(wrapped)
-        
-        
+        wrapped = self.container.get(MiddlewareChain).wrap_handler(handler, local_middlewares, request)
         try:
             if asyncio.iscoroutinefunction(wrapped):
                 response = await wrapped(request)
@@ -110,7 +106,8 @@ class Server(HTTPServer):
             else:
                 if self.executor:
                     loop = asyncio.get_running_loop()
-                    return await loop.run_in_executor(self.executor, (lambda: wrapped(request)))
+                    response = await loop.run_in_executor(self.executor, wrapped, request)
+                    return response
                 else:
                     response = wrapped(request)
                     return response
@@ -133,12 +130,6 @@ class Server(HTTPServer):
     
     async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[]) -> bytes:
         # run the global hook before handler
-        for global_hook in self._hook_before_each_handler:
-            result = global_hook(request)
-            if asyncio.iscoroutine(result):
-                await result
-        
-
 
         (method, path, is_early_hints_supported) = self._extract_method_path(request)
 
@@ -149,13 +140,10 @@ class Server(HTTPServer):
         else:
             raise MethodNotAllowed(f"{method}")
         
-        (encoded_response, formatted_response) = response.set_encoded_response()
-
-        for global_hook in self._hook_after_each_handler:
-            result = global_hook(request, formatted_response)
-            if asyncio.iscoroutine(result):
-                await result
-            
+        await self.container.get(MiddlewareChain).wrap_response(request, response)
+        
+        (encoded_response, _) = response.set_encoded_response()
+ 
         return encoded_response
     
 
