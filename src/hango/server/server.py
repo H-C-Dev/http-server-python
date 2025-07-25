@@ -6,6 +6,7 @@ from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Tuple, Any
 from hango.middleware import MiddlewareChain
+from .connection_manager import ConnectionManager
 
 PORT=8080
 
@@ -17,6 +18,24 @@ class HTTPServer:
 
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        
+        connection_manager = None
+        try:
+            connection_manager = self.container.get(ConnectionManager)
+        except Exception as e:
+            print(f"ConnectionManager not found: {e}")
+            pass
+        
+        # get the memory address of the writer as connection_id
+        connection_id = id(writer)
+        if connection_manager:
+            try:
+                await connection_manager.register(connection_id)
+            except RuntimeError:
+                print("Maximum connections reached, closing connection.")
+                writer.close()
+                return
+
         try:
             (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
             response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
@@ -28,6 +47,10 @@ class HTTPServer:
             print(f'Internal Error: {server_e}')
             response = self.handle_error_response(InternalServerError())
             await self.write_response(response, writer)
+        finally:
+            if connection_manager:
+                print(f"Deregistering connection {connection_id}")
+                await connection_manager.deregister(connection_id)
 
 
     async def write_response(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
@@ -66,6 +89,7 @@ class Server(HTTPServer):
         self._hook_before_each_handler = []
         self._hook_after_each_handler = []
         self._middlewarewares = MiddlewareChain()
+        self.connection_manager = ConnectionManager(max_connections=100)
 
         if concurrency_model =='process':
             print('process')
@@ -77,12 +101,12 @@ class Server(HTTPServer):
             self.executor = None
         else:
             raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
-
+        
+        self.container.register(ConnectionManager, self.connection_manager)
         self.container.register(RouteToHandler, self.router)
         self.container.register(ServeFile, self.serve_file)
         if self.executor:
             self.container.register(type(self.executor), self.executor)
-        
         self.container.register(MiddlewareChain, self._middlewarewares)
 
     def set_global_middlewares(self, func):
