@@ -51,6 +51,9 @@ class HTTPServer:
             if connection_manager:
                 print(f"Deregistering connection {connection_id}")
                 await connection_manager.deregister(connection_id)
+            if request.headers.connection != 'keep-alive':
+                writer.close()
+                await writer.wait_closed()
 
 
     async def write_response(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
