@@ -40,7 +40,6 @@ class HTTPServer:
             (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
             response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
             await self.write_response(response, writer)
-            print(request, " -> ")
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
             response = self.handle_error_response(http_e)
