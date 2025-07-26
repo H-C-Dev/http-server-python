@@ -5,7 +5,6 @@ from hango.http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
 from dataclasses import dataclass, field
 from typing import Optional, Any
-from hango.core import CORS
 from hango.http import Forbidden
 from hango.utils import ServeFile
 
