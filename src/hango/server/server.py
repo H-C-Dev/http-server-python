@@ -5,9 +5,9 @@ from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Tuple, Any
-from hango.middleware import MiddlewareChain
+from hango.middleware import MiddlewareChain, cors_middleware
 from .connection_manager import ConnectionManager
-
+import signal
 PORT=8080
 
 class HTTPServer:
@@ -18,7 +18,7 @@ class HTTPServer:
 
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        
+
         connection_manager = None
         try:
             connection_manager = self.container.get(ConnectionManager)
@@ -40,7 +40,9 @@ class HTTPServer:
             (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
             response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
             await self.write_response(response, writer)
+            print(request, " -> ")
         except HTTPError as http_e:
+            print(f"HTTP Error: {http_e}")
             response = self.handle_error_response(http_e)
             await self.write_response(response, writer)
         except Exception as server_e:
@@ -51,7 +53,7 @@ class HTTPServer:
             if connection_manager:
                 print(f"Deregistering connection {connection_id}")
                 await connection_manager.deregister(connection_id)
-            if request.headers.connection != 'keep-alive':
+            if 'request' in locals() and request.headers.connection != 'keep-alive':
                 writer.close()
                 await writer.wait_closed()
 
@@ -84,9 +86,9 @@ class HTTPServer:
 
 class Server(HTTPServer):
 
-    def __init__(self, host, port, backlog=5, concurrency_model='', container=None):
+    def __init__(self, host, port, backlog=5, concurrency_model=''):
         super().__init__(host, port, backlog)
-        self.container = container or ServiceContainer()
+        self.container = ServiceContainer()
         self.router = RouteToHandler()
         self.serve_file = ServeFile()
         self._hook_before_each_handler = []
@@ -111,6 +113,7 @@ class Server(HTTPServer):
         if self.executor:
             self.container.register(type(self.executor), self.executor)
         self.container.register(MiddlewareChain, self._middlewarewares)
+        self.set_global_middlewares(cors_middleware)
 
     def set_global_middlewares(self, func):
         self.container.get(MiddlewareChain).add_middleware(func)
@@ -195,34 +198,22 @@ class Server(HTTPServer):
         return decorator
     
 
-container = ServiceContainer()
 
-
-server = Server("0.0.0.0", PORT, concurrency_model='', container=container)
-
-@server.set_global_middlewares
-def cors_middleware(handler):
-    async def wrapped(request):
-        user_agent = request.headers.user_agent.lower()
-        host = request.headers.host
-        is_localhost = request.is_localhost
-        cors_header = None
-        if 'mozilla' in user_agent or 'chrome' in user_agent or 'safari' in user_agent: 
-            if is_localhost:
-                pass
-            elif '*' in CORS:
-                cors_header = "*"
-            elif 'http://' + host in CORS: 
-                cors_header = 'http://' + host
-            elif 'https://' + host in CORS:
-                cors_header = 'https://' + host
-            else:
-                raise Forbidden(message=f"Host {host} is not allowed to access this resource. CORS policy is validated.")
-        response = handler(request)
-        if asyncio.iscoroutine(response):
-             response = await response
-        response.cors_header = cors_header
-        return response
-    return wrapped
-    
+    def start_server(self):
+        async def main():
+            server_obj = await self.init_server()
+            print("Server is up and running.")
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(signal.SIGINT, server_obj.close)
+            await server_obj.wait_closed()
+            print("The server has been closed.")
         
+        asyncio.run(main())
+    
+    
+def create_app(host="0.0.0.0", port=PORT, concurrency_model=''):
+    server_obj = Server(host=host, port=port, concurrency_model=concurrency_model)
+    return server_obj
+
+
+
