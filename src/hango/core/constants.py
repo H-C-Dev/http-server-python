@@ -25,7 +25,6 @@ class ContentType(Enum):
 
 class EarlyHintsClient(Enum):
     FIREFOX = 'firefox'
-    POSTMAN = 'postman'
 
 EXTENSION_TO_MIME = {
     ".html": "text/html",
