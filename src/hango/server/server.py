@@ -39,30 +39,35 @@ class HTTPServer:
         try:
             (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
             response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
-            await self.write_response(response, writer)
+            await self.server_respond(response, writer)
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
             response = self.handle_error_response(http_e)
-            await self.write_response(response, writer)
+            await self.server_respond(response, writer)
         except Exception as server_e:
             print(f'Internal Error: {server_e}')
             response = self.handle_error_response(InternalServerError())
-            await self.write_response(response, writer)
+            await self.server_respond(response, writer)
         finally:
             if connection_manager:
                 print(f"Deregistering connection {connection_id}")
                 await connection_manager.deregister(connection_id)
             if 'request' in locals() and request.headers.connection != 'keep-alive':
-                writer.close()
-                await writer.wait_closed()
+                await self.close_conection(writer)
 
 
-    async def write_response(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
+    async def server_respond(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
+        await self.send_response(response, writer)
+        if not is_early_hints:
+            await self.close_conection(writer)
+
+    async def send_response(self, response, writer):
         writer.write(response)
         await writer.drain()
-        if not is_early_hints:
-            writer.close()
-            await writer.wait_closed()
+
+    async def close_conection(self, writer):
+        writer.close()
+        await writer.wait_closed()
 
     async def init_server(self):
         server = await asyncio.start_server(client_connected_cb=self._handle_client, host=self.host, port=self.port) 
@@ -82,9 +87,12 @@ class HTTPServer:
         )
         (encoded_response, _) = response.set_encoded_response()
         return encoded_response
+    
+
+
+
 
 class Server(HTTPServer):
-
     def __init__(self, host, port, backlog=5, concurrency_model=''):
         super().__init__(host, port, backlog)
         self.container = ServiceContainer()
@@ -155,7 +163,7 @@ class Server(HTTPServer):
     async def _handle_early_hints_response(self, writer, custom_hints=[]):
         early_hints_response = EarlyHintsResponse(custom_hints)
         encoded_response, _ = early_hints_response.set_encoded_response()
-        await super().write_response(encoded_response, writer, is_early_hints=True)
+        await super().server_respond(encoded_response, writer, is_early_hints=True)
     
     async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[]) -> bytes:
         # run the global hook before handler
