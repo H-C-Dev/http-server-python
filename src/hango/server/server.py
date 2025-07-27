@@ -24,6 +24,7 @@ class HTTPServer:
             connection_manager = self.container.get(ConnectionManager)
         except Exception as e:
             print(f"ConnectionManager not found: {e}")
+
             pass
         
         # get the memory address of the writer as connection_id
@@ -58,16 +59,16 @@ class HTTPServer:
 
     async def server_respond(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
         await self.send_response(response, writer)
-        if not is_early_hints:
-            await self.close_conection(writer)
+        await self.close_conection(writer, is_early_hints)
 
     async def send_response(self, response, writer):
         writer.write(response)
         await writer.drain()
 
-    async def close_conection(self, writer):
-        writer.close()
-        await writer.wait_closed()
+    async def close_conection(self, writer, is_early_hints:bool=False):
+        if not is_early_hints:
+            writer.close()
+            await writer.wait_closed()
 
     async def init_server(self):
         server = await asyncio.start_server(client_connected_cb=self._handle_client, host=self.host, port=self.port) 
