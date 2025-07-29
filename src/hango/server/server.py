@@ -52,18 +52,18 @@ class HTTPServer:
                 print(f"Deregistering connection {connection_id}")
                 await connection_manager.deregister(connection_id)
             if 'request' in locals() and request.headers.connection != 'keep-alive':
-                await self.close_conection(writer)
+                await self._close_connection(writer)
 
 
     async def server_respond(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
-        await self.send_response(response, writer)
-        await self.close_conection(writer, is_early_hints)
+        await self._send_response(response, writer)
+        await self._close_connection(writer, is_early_hints)
 
-    async def send_response(self, response, writer):
+    async def _send_response(self, response, writer):
         writer.write(response)
         await writer.drain()
 
-    async def close_conection(self, writer, is_early_hints:bool=False):
+    async def _close_connection(self, writer, is_early_hints:bool=False):
         if not is_early_hints:
             writer.close()
             await writer.wait_closed()
