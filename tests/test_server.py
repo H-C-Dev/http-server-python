@@ -73,10 +73,6 @@ def test_handle_error_response_functional(http_server):
     assert f"Content-Type: {ContentType.PLAIN.value}" in text
 
 
-def test_set_global_middlewares(server):
-    
-
-
 
 
 
