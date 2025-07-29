@@ -16,17 +16,12 @@ class HTTPServer:
         self.port = port
         self.backlog = backlog
 
-
-    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-
+    async def _register_connection_manager(self, writer: asyncio.StreamWriter) -> Tuple[int, ConnectionManager]:
         connection_manager = None
         try:
             connection_manager = self.container.get(ConnectionManager)
         except Exception as e:
             print(f"ConnectionManager not found: {e}")
-
-            pass
-        
         # get the memory address of the writer as connection_id
         connection_id = id(writer)
         if connection_manager:
@@ -35,8 +30,11 @@ class HTTPServer:
             except RuntimeError:
                 print("Maximum connections reached, closing connection.")
                 writer.close()
-                return
 
+        return (connection_id, connection_manager)
+
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        connection_id, connection_manager = await self._register_connection_manager(writer)
         try:
             (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
             response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
