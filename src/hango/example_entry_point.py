@@ -1,7 +1,7 @@
-from hango.server import create_app
+from hango.server import app
 
-app = create_app()
+server = app()
 from hango.examples.handler import *
 
 if __name__ == "__main__":
-    app.start_server()
+    server.start_server()

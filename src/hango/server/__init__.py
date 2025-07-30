@@ -1,3 +1,4 @@
-from .server import Server, create_app, HTTPServer
+from .server import Server, HTTPServer
+from .create_app import app
 
-__all__ = ["Server", "create_app", "HTTPServer"]
+__all__ = ["Server", "HTTPServer", "app"]

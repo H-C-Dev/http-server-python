@@ -1,20 +1,21 @@
 import asyncio
 from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response,EarlyHintsResponse, Forbidden
-from hango.core import ContentType, MethodType, CORS, ServiceContainer
+from hango.core import ContentType, MethodType
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Tuple, Any
-from hango.middleware import MiddlewareChain, cors_middleware
+from hango.middleware import MiddlewareChain
 from .connection_manager import ConnectionManager
 import signal
 PORT=8080
 
 class HTTPServer:
-    def __init__(self, host, port, backlog=5):
+    def __init__(self, host, port, container, backlog=5):
         self.host = host
         self.port = port
         self.backlog = backlog
+        self.container = container
 
     async def _register_connection_manager(self, writer: asyncio.StreamWriter) -> Tuple[int, ConnectionManager]:
         connection_manager = None
@@ -88,38 +89,27 @@ class HTTPServer:
         return encoded_response
     
 
-
-
-
 class Server(HTTPServer):
-    def __init__(self, host, port, backlog=5, concurrency_model=''):
-        super().__init__(host, port, backlog)
-        self.container = ServiceContainer()
-        self.router = RouteToHandler()
-        self.serve_file = ServeFile()
+    def __init__(self, host, port, container, backlog=5, concurrency_model=''):
+        super().__init__(host, port, container, backlog)
+        # self.container = container
+        self.concurrency_model = concurrency_model
         self._hook_before_each_handler = []
         self._hook_after_each_handler = []
-        self._middlewarewares = MiddlewareChain()
-        self.connection_manager = ConnectionManager(max_connections=100)
+        self._executor = None
+        self._load_concurrency_model()
 
-        if concurrency_model =='process':
+    def _load_concurrency_model(self):
+        if self.concurrency_model =='process':
             print('process')
-            self.executor = ProcessPoolExecutor()
-        elif concurrency_model =='thread':
+            self._executor = ProcessPoolExecutor()
+        elif self.concurrency_model =='thread':
             print('thread')
-            self.executor = ThreadPoolExecutor()
-        elif concurrency_model == '':
-            self.executor = None
+            self._executor = ThreadPoolExecutor()
+        elif self.concurrency_model == '':
+            self._executor = None
         else:
-            raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
-        
-        self.container.register(ConnectionManager, self.connection_manager)
-        self.container.register(RouteToHandler, self.router)
-        self.container.register(ServeFile, self.serve_file)
-        if self.executor:
-            self.container.register(type(self.executor), self.executor)
-        self.container.register(MiddlewareChain, self._middlewarewares)
-        self.set_global_middlewares(cors_middleware)
+            raise ValueError(f"Unknown concurrency_model: {self.concurrency_model}")
 
     def set_global_middlewares(self, func):
         self.container.get(MiddlewareChain).add_middleware(func)
@@ -184,7 +174,7 @@ class Server(HTTPServer):
     
 
     async def _handle_static_request(self, path, writer, is_early_hints_supported):
-            (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
+            (file_bytes, content_type, hints) = self.container.get(ServeFile).serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
                 await self._handle_early_hints_response(writer, hints)
             response = Response(body=file_bytes, status_code="200", content_type=content_type)
@@ -193,17 +183,16 @@ class Server(HTTPServer):
     
     def GET(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.GET.value, local_middlewares)
+            self.container.get(RouteToHandler).add_route(template, func, MethodType.GET.value, local_middlewares)
             return func
         return decorator
 
     def POST(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.POST.value, local_middlewares)
+            self.container.get(RouteToHandler).add_route(template, func, MethodType.POST.value, local_middlewares)
             return func
         return decorator
     
-
 
     def start_server(self):
         async def main():
@@ -217,9 +206,9 @@ class Server(HTTPServer):
         asyncio.run(main())
     
     
-def create_app(host="0.0.0.0", port=PORT, concurrency_model=''):
-    server_obj = Server(host=host, port=port, concurrency_model=concurrency_model)
-    return server_obj
+# def create_app(host="0.0.0.0", port=PORT, concurrency_model=''):
+#     server_obj = Server(host=host, port=port, concurrency_model=concurrency_model)
+#     return server_obj
 
 
 
