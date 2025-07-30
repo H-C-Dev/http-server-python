@@ -33,27 +33,35 @@ class HTTPServer:
                 writer.close()
 
         return (connection_id, connection_manager)
+    
+    async def _process_request(self, reader, writer):
+        request = None
+        try:
+            (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
+            response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
+        except HTTPError as http_e:
+            print(f"HTTP Error: {http_e}")
+            response = self.handle_error_response(http_e)
+        except Exception as server_e:
+            print(f'Internal Error: {server_e}')
+            response = self.handle_error_response(InternalServerError())
+        await self.server_respond(response, writer)
+        return request
+        
+    async def _clean_up_connection(self, connection_id, connection_manager, request, writer):
+            if connection_manager:
+                print(f"Deregistering connection {connection_id}")
+                await connection_manager.deregister(connection_id)
+            if request and request.headers.connection != 'keep-alive':
+                await self._close_connection(writer)
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         connection_id, connection_manager = await self._register_connection_manager(writer)
         try:
-            (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
-            response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
-            await self.server_respond(response, writer)
-        except HTTPError as http_e:
-            print(f"HTTP Error: {http_e}")
-            response = self.handle_error_response(http_e)
-            await self.server_respond(response, writer)
-        except Exception as server_e:
-            print(f'Internal Error: {server_e}')
-            response = self.handle_error_response(InternalServerError())
-            await self.server_respond(response, writer)
+            request = await self._process_request(reader, writer)
         finally:
-            if connection_manager:
-                print(f"Deregistering connection {connection_id}")
-                await connection_manager.deregister(connection_id)
-            if 'request' in locals() and request.headers.connection != 'keep-alive':
-                await self._close_connection(writer)
+            await self._clean_up_connection(connection_id, connection_manager, request, writer)
+
 
 
     async def server_respond(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
@@ -205,10 +213,6 @@ class Server(HTTPServer):
         
         asyncio.run(main())
     
-    
-# def create_app(host="0.0.0.0", port=PORT, concurrency_model=''):
-#     server_obj = Server(host=host, port=port, concurrency_model=concurrency_model)
-#     return server_obj
 
 
 
