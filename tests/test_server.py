@@ -1,67 +1,138 @@
 import pytest
 from hango.server import HTTPServer, Server
 from unittest.mock import AsyncMock, MagicMock, Mock
-from hango.core import ContentType
+from hango.core import ContentType, ServiceContainer
 import asyncio
+
+
+@pytest.fixture
+def mock_container():
+    return MagicMock
 
 @pytest.fixture
 def server():
-    return Server("0.0.0.0", 8080)
+    return Server("0.0.0.0", 8080, mock_container)
 
 @pytest.fixture
 def http_server():
-    return HTTPServer("0.0.0.0", 8080)
+    return HTTPServer("0.0.0.0", 8080, ServiceContainer())
 
+@pytest.fixture
+def mock_reader():
+    return MagicMock()
 
-response = b"HTTP/1.1 200 OK\r\n\r\nHello"
+@pytest.fixture
+def mock_writer():
+    return MagicMock()
+
+@pytest.fixture
+def mock_request():
+    return MagicMock()
+
+@pytest.fixture
+def mock_connection_manager():
+    return MagicMock()
+
+@pytest.fixture
+def mock_connection_id():
+    return "123"
+
+@pytest.fixture
+def mock_response():
+    return MagicMock()
+
+@pytest.mark.asyncio
+async def test__handle_client(monkeypatch, http_server, mock_reader, mock_writer, mock_request, mock_connection_manager, mock_connection_id):
+    spy_clean_up_connection = AsyncMock()
+    monkeypatch.setattr(http_server, "_register_connection_manager", AsyncMock(return_value=("123", mock_connection_manager)))
+    monkeypatch.setattr(http_server, "_process_request", AsyncMock(return_value=mock_request))
+    monkeypatch.setattr(http_server, "_clean_up_connection", spy_clean_up_connection)
+    await http_server._handle_client(mock_reader, mock_writer)
+    http_server._process_request.assert_awaited_once_with(mock_reader, mock_writer)
+    http_server._clean_up_connection.assert_awaited_once_with(mock_connection_id, mock_connection_manager, mock_request, mock_writer)
+    spy_clean_up_connection.assert_awaited_once_with(mock_connection_id, mock_connection_manager, mock_request, mock_writer)
+    assert http_server._clean_up_connection is spy_clean_up_connection
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("connection, should_close", [("close", True), ("keep-alive", False)])
+async def test__clean_up_connection(monkeypatch, http_server, mock_writer, mock_request, mock_connection_manager, mock_connection_id, connection, should_close):
+    spy_deregister = AsyncMock()
+    spy_close_connection = AsyncMock()
+    monkeypatch.setattr(mock_connection_manager, "deregister", spy_deregister)
+    mock_request.headers.connection = connection
+    monkeypatch.setattr(http_server, "_close_connection", spy_close_connection)
+    await http_server._clean_up_connection(mock_connection_id, mock_connection_manager, mock_request, mock_writer)
+
+    mock_connection_manager.deregister.assert_awaited_once_with(mock_connection_id)
+    if should_close:
+        http_server._close_connection.assert_awaited_once_with(mock_writer)
+        assert http_server._close_connection is spy_close_connection
+    else:
+        http_server._close_connection.assert_not_awaited()
+        assert http_server._close_connection is spy_close_connection
+        
+@pytest.mark.asyncio
+async def test__process_request(monkeypatch, server):
+    mock_handler = MagicMock()
+    mock_is_static_prefix = False
+    mock_local_middlewares = []
+
+    monkeypatch.setattr(server, "parse_request", AsyncMock(return_value=(mock_request, mock_handler, mock_is_static_prefix, mock_local_middlewares)))
+    monkeypatch.setattr(server, "handle_request", AsyncMock(return_value=mock_response))
+    spy_server_respond = AsyncMock()
+    monkeypatch.setattr(server, "server_respond", spy_server_respond)
+    await server._process_request(mock_reader, mock_writer)
+
+    server.parse_request.assert_awaited_once_with(mock_reader, mock_writer)
+    server.handle_request.assert_awaited_once_with(mock_request, mock_handler, mock_writer, mock_is_static_prefix, mock_local_middlewares)
+    server.server_respond.assert_awaited_once_with(mock_response, mock_writer)
+
+@pytest.fixture
+def mock_raw_response():
+    return b"HTTP/1.1 200 OK\r\n\r\nHello"
+
 
 @pytest.mark.asyncio
 async def test_server_respond(http_server):
     http_server._send_response = AsyncMock()
     http_server._close_connection = AsyncMock()
-    writer = MagicMock()
-    writer.drain = AsyncMock()
-    writer.wait_closed = AsyncMock()
-    response = b"HTTP/1.1 200 OK\r\n\r\nHello"
+    # writer = MagicMock()
+    mock_writer.drain = AsyncMock()
+    mock_writer.wait_closed = AsyncMock()
     is_early_hints = False
-
-    await http_server.server_respond(response, writer, is_early_hints)
-
-    http_server._send_response.assert_awaited_once_with(response, writer)
-    http_server._close_connection.assert_awaited_once_with(writer, is_early_hints)
+    await http_server.server_respond(mock_raw_response, mock_writer, is_early_hints)
+    http_server._send_response.assert_awaited_once_with(mock_raw_response, mock_writer)
+    http_server._close_connection.assert_awaited_once_with(mock_writer, is_early_hints)
 
 @pytest.mark.asyncio
 async def test__send_response(http_server):
-    response = b"HTTP/1.1 200 OK\r\n\r\nHello"
-    writer = MagicMock()
-    writer.drain = AsyncMock()
-
-    await http_server._send_response(response, writer)
-    writer.write.assert_called_once_with(response)
-    writer.drain.assert_awaited_once()
+    mock_writer = MagicMock()
+    mock_writer.drain = AsyncMock()
+    await http_server._send_response(mock_raw_response, mock_writer)
+    mock_writer.write.assert_called_once_with(mock_raw_response)
+    mock_writer.drain.assert_awaited_once()
 
 @pytest.mark.asyncio
 async def test__close_connection(http_server):
-    writer = MagicMock()
-    writer.wait_closed = AsyncMock()
-
-    await http_server._close_connection(writer, False)
-    writer.wait_closed.assert_awaited_once()
+    mock_writer = MagicMock()
+    mock_writer.wait_closed = AsyncMock()
+    await http_server._close_connection(mock_writer, False)
+    mock_writer.wait_closed.assert_awaited_once()
 
 
 
 @pytest.mark.asyncio
 async def test_init_server(monkeypatch, http_server):
-    dummy_server = object()
-    start_server_mock = AsyncMock(return_value=dummy_server)
-    monkeypatch.setattr(asyncio, "start_server", start_server_mock)
+    
+    spy_mock_server = AsyncMock(return_value=http_server)
+    monkeypatch.setattr(asyncio, "start_server", spy_mock_server)
     result = await http_server.init_server()
-    start_server_mock.assert_awaited_once_with(
+    spy_mock_server.assert_awaited_once_with(
         client_connected_cb=http_server._handle_client,
         host=http_server.host,
         port=http_server.port
     )
-    assert result is dummy_server
+    assert result is http_server
     
 
 def test_handle_error_response_functional(http_server):
@@ -71,8 +142,6 @@ def test_handle_error_response_functional(http_server):
     assert text.startswith(f"HTTP/1.1 {dummy_error.status_code}")
     assert dummy_error.message in text
     assert f"Content-Type: {ContentType.PLAIN.value}" in text
-
-
 
 
 
