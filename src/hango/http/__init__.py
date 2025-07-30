@@ -9,7 +9,7 @@ from .http_error import (
     InternalServerError,
     HTTPVersionNotSupported,
 )
-from .request import HTTPRequestParser
+from .request import HTTPRequestParser, Request
 from .response import Response, EarlyHintsResponse
 
 __all__ = [
@@ -26,5 +26,6 @@ __all__ = [
     "CustomResponse",
     "CustomEarlyHintsResponse"
     "Response",
+    "Request",
     "EarlyHintsResponse",
 ]
