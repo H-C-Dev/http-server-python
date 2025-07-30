@@ -1,5 +1,5 @@
 import asyncio
-from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response,EarlyHintsResponse, Forbidden
+from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response, EarlyHintsResponse, Request
 from hango.core import ContentType, MethodType
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
@@ -34,11 +34,13 @@ class HTTPServer:
 
         return (connection_id, connection_manager)
     
-    async def _process_request(self, reader, writer):
+    async def _process_request(self, reader, writer) -> Request:
         request = None
         try:
-            (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
-            response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
+            (request, handler, is_static_prefix, local_middlewares) = \
+                await self.parse_request(reader, writer)
+            response = \
+                await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
             response = self.handle_error_response(http_e)
@@ -61,8 +63,6 @@ class HTTPServer:
             request = await self._process_request(reader, writer)
         finally:
             await self._clean_up_connection(connection_id, connection_manager, request, writer)
-
-
 
     async def server_respond(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
         await self._send_response(response, writer)
