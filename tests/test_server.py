@@ -7,7 +7,8 @@ import asyncio
 
 @pytest.fixture
 def mock_container():
-    return MagicMock
+    return MagicMock()
+
 
 @pytest.fixture
 def server():
@@ -143,6 +144,62 @@ def test_handle_error_response_functional(http_server):
     assert dummy_error.message in text
     assert f"Content-Type: {ContentType.PLAIN.value}" in text
 
+from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
+
+@pytest.mark.parametrize("mock_concurrency_model", ['process', 'thread', ''])
+def test__load_concurrency_model(server, mock_concurrency_model):
+    server.concurrency_model = mock_concurrency_model
+
+    server._load_concurrency_model()
+    if mock_concurrency_model == 'process':
+        assert isinstance(server._executor, ProcessPoolExecutor)
+    elif mock_concurrency_model == 'thread':
+        assert isinstance(server._executor, ThreadPoolExecutor)
+    else: 
+        assert server._executor is None
+
+
+def test_set_global_middlewares(server, mock_container):
+    mock_chain = MagicMock()
+    mock_container.get.return_value = mock_chain
+    server = Server("0.0.0.0", 8080, mock_container)
+
+    def mock_middleware(request):
+        return request
+    
+    returned = server.set_global_middlewares(mock_middleware)
+
+    mock_chain.add_middleware.assert_called_once_with(mock_middleware)
+    assert returned is mock_middleware
+
+
+def test_set_hook_before_each_handler(server, mock_container):
+    mock_chain = MagicMock()
+    mock_container.get.return_value = mock_chain
+    server = Server("0.0.0.0", 8080, mock_container)
+
+    def mock_hoook(request):
+        return request
+    
+    returned = server.set_hook_before_each_handler(mock_chain)
+
+    mock_chain.add_hook_before_each_handler(mock_hoook)
+    assert returned is mock_chain
+
+def test_set_hook_after_each_handler(server, mock_container):
+    mock_chain = MagicMock()
+    mock_container.get.return_value = mock_chain
+    server = Server("0.0.0.0", 8080, mock_container)
+
+    def mock_hoook(request):
+        return request
+    
+    returned = server.set_hook_after_each_handler(mock_chain)
+
+    mock_chain.add_hook_after_each_handler(mock_hoook)
+    assert returned is mock_chain
+
+    
 
 
 
