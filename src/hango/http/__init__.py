@@ -10,7 +10,7 @@ from .http_error import (
     HTTPVersionNotSupported,
 )
 from .request import HTTPRequestParser, Request
-from .response import Response, EarlyHintsResponse
+from .response import Response, EarlyHintsResponse, ResponseHeaders
 
 __all__ = [
     "HTTPError",
@@ -28,4 +28,5 @@ __all__ = [
     "Response",
     "Request",
     "EarlyHintsResponse",
+    "ResponseHeaders"
 ]
