@@ -64,7 +64,7 @@ class Request:
 
 
 class HTTPRequestParser:
-    def __init__(self, bufsize: int = 4096, encoding: str = 'utf-8', container=None):
+    def __init__(self, container, bufsize: int = 4096, encoding: str = 'utf-8'):
         if container is None:
             raise RuntimeError("HTTPRequestParser requires a ServiceContainer")
         self.container = container 
