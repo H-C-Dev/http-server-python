@@ -1,7 +1,7 @@
 from hango.http   import Response
-from hango.utils  import type_safe
-from hango.server import server
+from hango.core  import type_safe
 import asyncio
+from hango.example_entry_point import server
 
 
 @server.set_global_middlewares

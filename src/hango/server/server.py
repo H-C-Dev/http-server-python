@@ -1,48 +1,90 @@
 import asyncio
-from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, CustomRequest, Response,EarlyHintsResponse, Forbidden
-from hango.constants import ContentType, MethodType, CORS
+from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response, EarlyHintsResponse, Request
+from hango.core import ContentType, MethodType
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-
+from typing import Tuple, Any
+from hango.middleware import MiddlewareChain
+from .connection_manager import ConnectionManager
+import signal
 PORT=8080
 
 class HTTPServer:
-    def __init__(self, host, port, backlog=5):
+    def __init__(self, host, port, container, backlog=5):
         self.host = host
         self.port = port
         self.backlog = backlog
+        self.container = container
 
-
-    async def __handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    async def _register_connection_manager(self, writer: asyncio.StreamWriter) -> Tuple[int, ConnectionManager]:
+        connection_manager = None
         try:
-            (request, handler, is_static_prefix, local_middlewares) = await self.parse_request(reader, writer)
-            response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
-            await self.write_response(response, writer)
+            connection_manager = self.container.get(ConnectionManager)
+        except Exception as e:
+            print(f"ConnectionManager not found: {e}")
+        # get the memory address of the writer as connection_id
+        connection_id = id(writer)
+        if connection_manager:
+            try:
+                await connection_manager.register(connection_id)
+            except RuntimeError:
+                print("Maximum connections reached, closing connection.")
+                writer.close()
+
+        return (connection_id, connection_manager)
+    
+    async def _process_request(self, reader, writer) -> Request:
+        request = None
+        try:
+            (request, handler, is_static_prefix, local_middlewares) = \
+                await self.parse_request(reader, writer)
+            response = \
+                await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
         except HTTPError as http_e:
+            print(f"HTTP Error: {http_e}")
             response = self.handle_error_response(http_e)
-            await self.write_response(response, writer)
         except Exception as server_e:
             print(f'Internal Error: {server_e}')
             response = self.handle_error_response(InternalServerError())
-            await self.write_response(response, writer)
+        await self.server_respond(response, writer)
+        return request
+        
+    async def _clean_up_connection(self, connection_id, connection_manager, request, writer):
+            if connection_manager:
+                print(f"Deregistering connection {connection_id}")
+                await connection_manager.deregister(connection_id)
+            if request and request.headers.connection != 'keep-alive':
+                await self._close_connection(writer)
 
+    async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        connection_id, connection_manager = await self._register_connection_manager(writer)
+        try:
+            request = await self._process_request(reader, writer)
+        finally:
+            await self._clean_up_connection(connection_id, connection_manager, request, writer)
 
-    async def write_response(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
+    async def server_respond(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
+        await self._send_response(response, writer)
+        await self._close_connection(writer, is_early_hints)
+
+    async def _send_response(self, response, writer):
         writer.write(response)
         await writer.drain()
+
+    async def _close_connection(self, writer, is_early_hints:bool=False):
         if not is_early_hints:
             writer.close()
             await writer.wait_closed()
 
     async def init_server(self):
-        server = await asyncio.start_server(client_connected_cb=self.__handle_client, host=self.host, port=self.port) 
+        server = await asyncio.start_server(client_connected_cb=self._handle_client, host=self.host, port=self.port) 
         return server
 
-    async def parse_request(self, reader: asyncio.StreamReader):
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         raise NotImplementedError
 
-    async def handle_request(self, request, writer):
+    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares):
         raise NotImplementedError
 
     def handle_error_response(self, http_error):
@@ -53,49 +95,44 @@ class HTTPServer:
         )
         (encoded_response, _) = response.set_encoded_response()
         return encoded_response
+    
 
 class Server(HTTPServer):
-
-    def __init__(self, host, port, backlog=5, concurrency_model=''):
-        super().__init__(host, port, backlog)
-        self.router = RouteToHandler()
-        self.serve_file = ServeFile()
+    def __init__(self, host, port, container, backlog=5, concurrency_model=''):
+        super().__init__(host, port, container, backlog)
+        # self.container = container
+        self.concurrency_model = concurrency_model
         self._hook_before_each_handler = []
         self._hook_after_each_handler = []
-        self._global_middlewares = []
+        self._executor = None
+        self._load_concurrency_model()
 
-        if concurrency_model =='process':
+    def _load_concurrency_model(self):
+        if self.concurrency_model =='process':
             print('process')
-            self.executor = ProcessPoolExecutor()
-        elif concurrency_model =='thread':
+            self._executor = ProcessPoolExecutor()
+        elif self.concurrency_model =='thread':
             print('thread')
-            self.executor = ThreadPoolExecutor()
-        elif concurrency_model == '':
-            self.executor = None
+            self._executor = ThreadPoolExecutor()
+        elif self.concurrency_model == '':
+            self._executor = None
         else:
-            raise ValueError(f"Unknown concurrency_model: {concurrency_model}")
+            raise ValueError(f"Unknown concurrency_model: {self.concurrency_model}")
 
     def set_global_middlewares(self, func):
-        self._global_middlewares.append(func)
+        self.container.get(MiddlewareChain).add_middleware(func)
         return func
 
     def set_hook_before_each_handler(self, func):
-        self._hook_before_each_handler.append(func)
+        self.container.get(MiddlewareChain).add_hook_before_each_handler(func)
         return func
     
     def set_hook_after_each_handler(self, func):
-        self._hook_after_each_handler.append(func)
+        self.container.get(MiddlewareChain).add_hook_after_each_handler(func)
         return func
 
-    async def __invoke_handler(self, handler, request, local_middlewares) -> Response:
-        wrapped = handler
-        for local_middleware in local_middlewares:
-            wrapped = local_middleware(wrapped)
-
-        for middleware in self._global_middlewares:
-            wrapped = middleware(wrapped)
-        
-        
+    async def _invoke_handler(self, handler, request, local_middlewares) -> Response:
+        wrapped = self.container.get(MiddlewareChain).wrap_handler(handler, local_middlewares, request)
         try:
             if asyncio.iscoroutinefunction(wrapped):
                 response = await wrapped(request)
@@ -103,7 +140,8 @@ class Server(HTTPServer):
             else:
                 if self.executor:
                     loop = asyncio.get_running_loop()
-                    return await loop.run_in_executor(self.executor, (lambda: wrapped(request)))
+                    response = await loop.run_in_executor(self.executor, wrapped, request)
+                    return response
                 else:
                     response = wrapped(request)
                     return response
@@ -112,94 +150,69 @@ class Server(HTTPServer):
             raise BadRequest(f"{request.body}")
 
 
-    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> any:
-        return await CustomRequest(router=self.router).parse_request(reader, writer)
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> HTTPRequestParser:
+        return await HTTPRequestParser(container=self.container).parse_request(reader, writer)
     
-    def __extract_useful_request_info(self, request) -> tuple[str, str]:
+    def _extract_method_path(self, request) -> tuple[str, str, bool]:
         method, path, is_early_hints_supported = request.method, request.path,request.is_early_hints_supported
         return (method, path, is_early_hints_supported)
     
-    async def __handle_early_hints_response(self, writer, custom_hints=[]):
+    async def _handle_early_hints_response(self, writer, custom_hints=[]):
         early_hints_response = EarlyHintsResponse(custom_hints)
         encoded_response, _ = early_hints_response.set_encoded_response()
-        await super().write_response(encoded_response, writer, is_early_hints=True)
+        await super().server_respond(encoded_response, writer, is_early_hints=True)
     
     async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[]) -> bytes:
         # run the global hook before handler
-        for global_hook in self._hook_before_each_handler:
-            result = global_hook(request)
-            if asyncio.iscoroutine(result):
-                await result
-        
 
-
-        (method, path, is_early_hints_supported) = self.__extract_useful_request_info(request)
+        (method, path, is_early_hints_supported) = self._extract_method_path(request)
 
         if method == MethodType.GET.value and is_static_prefix:
-            response = await self.__handle_GET_static_request(path, writer, is_early_hints_supported)
+            response = await self._handle_static_request(path, writer, is_early_hints_supported)
         elif method == MethodType.POST.value or method == MethodType.GET.value:
-            response = await self.__invoke_handler(handler, request, local_middlewares)
+            response = await self._invoke_handler(handler, request, local_middlewares)
         else:
             raise MethodNotAllowed(f"{method}")
         
-        (encoded_response, formatted_response) = response.set_encoded_response()
-
-        for global_hook in self._hook_after_each_handler:
-            result = global_hook(request, formatted_response)
-            if asyncio.iscoroutine(result):
-                await result
-            
+        await self.container.get(MiddlewareChain).wrap_response(request, response)
+        
+        (encoded_response, _) = response.set_encoded_response()
+ 
         return encoded_response
     
 
-    async def __handle_GET_static_request(self, path, writer, is_early_hints_supported):
-            (file_bytes, content_type, hints) = self.serve_file.serve_static_file(path)
+    async def _handle_static_request(self, path, writer, is_early_hints_supported):
+            (file_bytes, content_type, hints) = self.container.get(ServeFile).serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
-                await self.__handle_early_hints_response(writer, hints)
+                await self._handle_early_hints_response(writer, hints)
             response = Response(body=file_bytes, status_code="200", content_type=content_type)
             return response
 
     
     def GET(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.GET.value, local_middlewares)
+            self.container.get(RouteToHandler).add_route(template, func, MethodType.GET.value, local_middlewares)
             return func
         return decorator
 
     def POST(self, template: str, local_middlewares=[]):
         def decorator(func):
-            self.router.add_route(template, func, MethodType.POST.value, local_middlewares)
+            self.container.get(RouteToHandler).add_route(template, func, MethodType.POST.value, local_middlewares)
             return func
         return decorator
     
 
-
-
-server = Server("0.0.0.0", PORT, concurrency_model='')
-
-@server.set_global_middlewares
-def cors_middleware(handler):
-    async def wrapped(request):
-        user_agent = request.headers.user_agent.lower()
-        host = request.headers.host
-        is_localhost = request.is_localhost
-        cors_header = None
-        if 'mozilla' in user_agent or 'chrome' in user_agent or 'safari' in user_agent: 
-            if is_localhost:
-                pass
-            elif '*' in CORS:
-                cors_header = "*"
-            elif 'http://' + host in CORS: 
-                cors_header = 'http://' + host
-            elif 'https://' + host in CORS:
-                cors_header = 'https://' + host
-            else:
-                raise Forbidden(message=f"Host {host} is not allowed to access this resource. CORS policy is validated.")
-        response = handler(request)
-        if asyncio.iscoroutine(response):
-             response = await response
-        response.cors_header = cors_header
-        return response
-    return wrapped
-    
+    def start_server(self):
+        async def main():
+            server_obj = await self.init_server()
+            print("Server is up and running.")
+            loop = asyncio.get_running_loop()
+            loop.add_signal_handler(signal.SIGINT, server_obj.close)
+            await server_obj.wait_closed()
+            print("The server has been closed.")
         
+        asyncio.run(main())
+    
+
+
+

@@ -1,5 +1,7 @@
+from typing import Optional
+
 class HTTPError(Exception):
-    def __init__(self, status_code: str, message: str = None):
+    def __init__(self, status_code: str, message: Optional[str] = None):
         self.status_code = status_code
         self.message = message or f"{status_code} Error"
         super().__init__(self.message)

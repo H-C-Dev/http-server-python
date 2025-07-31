@@ -1,13 +1,13 @@
-from hango.constants import EarlyHintsClient
+from hango.core import EarlyHintsClient, ServiceContainer
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
 from dataclasses import dataclass, field
-from typing import Optional
-from hango.constants import CORS
+from typing import Optional, Any
 from hango.http import Forbidden
 from hango.utils import ServeFile
+
 @dataclass
 class RequestHeaders:
     content_type: Optional[str] = None
@@ -59,19 +59,22 @@ class Request:
     body: str
     headers: RequestHeaders
     is_early_hints_supported: bool
-    params: dict = field(default_factory=dict)
+    params: Optional[dict] = field(default_factory=dict)
     is_localhost: bool = False
 
 
-class CustomRequest:
-    def __init__(self, router: RouteToHandler, bufsize: int = 4096, encoding: str = 'utf-8'):
+class HTTPRequestParser:
+    def __init__(self, container, bufsize: int = 4096, encoding: str = 'utf-8'):
+        if container is None:
+            raise RuntimeError("HTTPRequestParser requires a ServiceContainer")
+        self.container = container 
         self.bufsize = bufsize
         self.encoding = encoding
-        self.router = router
-        self.serve_file = ServeFile()
+        # self.serve_file = ServeFile()
 
 
-    async def __receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
+
+    async def _receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
         try:
             data = await reader.readuntil(b"\r\n\r\n")
         except asyncio.IncompleteReadError as e:
@@ -80,40 +83,40 @@ class CustomRequest:
         print('[RECEIVED DATA]', data)
         return data
         
-    def __separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
+    def _separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
         headers, space, body = data.partition(b"\r\n\r\n")
         return (headers, body)
     
-    def __decode_header(self, headers: bytes) -> str:
+    def _decode_header(self, headers: bytes) -> str:
         header_text = headers.decode(self.encoding, errors="ignore")
         return header_text
     
-    def __split_header_text(self, header_text: str) -> list[str]:
+    def _split_header_text(self, header_text: str) -> list[str]:
         lines = header_text.split("\r\n")
         return lines
 
-    async def __extract_request_lines_and_body(self, reader: asyncio.StreamReader) -> tuple[bytes, list[str]]:
-        data = await self.__receive_byte_data(reader)
-        headers, body = self.__separate_lines_and_body(data)
-        header_text = self.__decode_header(headers)
-        lines = self.__split_header_text(header_text)
+    async def _extract_request_lines_and_body(self, reader: asyncio.StreamReader) -> tuple[bytes, list[str]]:
+        data = await self._receive_byte_data(reader)
+        headers, body = self._separate_lines_and_body(data)
+        header_text = self._decode_header(headers)
+        lines = self._split_header_text(header_text)
         
         return (body, lines)
     
-    def __check_http_version(self, version):
+    def _check_http_version(self, version):
         if version != "HTTP/1.1":
             raise HTTPVersionNotSupported()
 
-    def __extract_request_line(self, lines):
+    def _extract_request_line(self, lines):
         method, path, version = lines[0].split(" ")
-        self.__check_http_version(version)
+        self._check_http_version(version)
         return (method, path, version)
     
 
 
 
     
-    def __parse_headers(self, lines):
+    def _parse_headers(self, lines):
         headers = RequestHeaders()
         setter_map = {
             "content-type": headers.set_content_type,
@@ -137,21 +140,21 @@ class CustomRequest:
     
     
 
-    def __is_client_localhost(self, writer: asyncio.StreamWriter) -> str:
+    def _is_client_localhost(self, writer: asyncio.StreamWriter) -> bool:
         peer_ip, _ = writer.get_extra_info('peername')
         if peer_ip in ('127.0.0.1', '::1'):
                 return True
         return False
 
 
-    async def __extract_body(self, body, headers, reader: asyncio.StreamReader):
+    async def _extract_body(self, body, headers, reader: asyncio.StreamReader):
         content_length = int(headers.content_length) if headers.content_length != None else 0
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < content_length:
             body += await reader.read(self.bufsize)
         return body
     
-    def __extract_path_and_query(self, raw_path):
+    def _extract_path_and_query(self, raw_path):
         # if there is a "?", parse the query
         if "?" in raw_path:
             path, qs = raw_path.split("?", 1)
@@ -162,22 +165,23 @@ class CustomRequest:
             query = {}
             return (path, query)
         
-    def __client_supports_early_hints(self, user_agent: str) -> bool:
+    def _client_supports_early_hints(self, user_agent: str) -> bool:
         if EarlyHintsClient.FIREFOX.value.upper() in user_agent.upper():
             return True
         return False
 
-    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> any:
-        body, lines = await self.__extract_request_lines_and_body(reader)
-        method, path, version = self.__extract_request_line(lines)
-        headers = self.__parse_headers(lines)
-        is_early_hints_supported = self.__client_supports_early_hints(headers.user_agent)
-        body = await self.__extract_body(body, headers, reader)
-        path, query = self.__extract_path_and_query(path)
-        is_localhost = self.__is_client_localhost(writer)
+    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Any:
+        body, lines = await self._extract_request_lines_and_body(reader)
+        method, path, version = self._extract_request_line(lines)
+        headers = self._parse_headers(lines)
+        is_early_hints_supported = self._client_supports_early_hints(headers.user_agent)
+        body = await self._extract_body(body, headers, reader)
+        path, query = self._extract_path_and_query(path)
+        is_localhost = self._is_client_localhost(writer)
         request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
-        if self.serve_file.is_static_prefix(path):
-            return (request, None, self.serve_file.is_static_prefix(path), None)
-        (handler, parameters, local_middlewares) = self.router.match_handler(method, path)
+        serve_file = self.container.get(ServeFile)
+        if serve_file.is_static_prefix(path):
+            return (request, None, serve_file.is_static_prefix(path), None)
+        (handler, parameters, local_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
         request.params = parameters
         return (request, handler, False, local_middlewares)
