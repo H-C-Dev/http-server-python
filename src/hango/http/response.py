@@ -39,7 +39,21 @@ class Response:
                              else ContentType.PLAIN.value if body == None
                              else None)
         self.cors_header = None
+
         
+    def get_headers(self, content_length):
+        headers = ResponseHeaders(
+            status_code=self.status_code,
+            status_message=http_status_codes_message[str(self.status_code)],
+            date=response_time(),
+            server="HANGO",
+            content_type=self.content_type,
+            content_length=content_length,
+            cors_header= self.cors_header if self.cors_header else None
+        )
+        return headers
+
+
     def set_headers(self):
         if not http_status_codes_message[str(self.status_code)]:
             raise ValueError(f"Invalid status code: {self.status_code}")
@@ -51,15 +65,8 @@ class Response:
         else:
             content_length = None
 
-        headers = ResponseHeaders(
-            status_code=self.status_code,
-            status_message=http_status_codes_message[str(self.status_code)],
-            date=response_time(),
-            server="HANGO",
-            content_type=self.content_type,
-            content_length=content_length,
-            cors_header= self.cors_header if self.cors_header else None
-        )
+        headers = self.get_headers(content_length)
+
         self.headers = headers
         
 
@@ -80,17 +87,19 @@ class EarlyHintsResponse(Response):
         super().__init__(status_code=103)
         self.hints = hints
 
-    def set_encoded_response(self) -> Tuple[bytes, str]:
-        super().set_headers()
+    def _set_early_hints_header(self):
         early_hints_header = ""
         for hint in self.hints:
             early_hints_header += f"Link: <{hint['url']}>; rel={hint['rel']}; as={hint['as']}; type={hint['type']}\r\n"
         early_hints_header += "\r\n"
-        
+        return early_hints_header
+
+    def set_encoded_response(self) -> Tuple[bytes, str]:
+        super().set_headers()
+        early_hints_header = self._set_early_hints_header()
         if self.headers is None:
             raise ValueError("Response headers have not been set.")
         formatted_response = self.headers.return_response_headers()[:-4] + early_hints_header
         print('[FORMATTED EARLY HINTS RESPONSE]', formatted_response)
-        print(type(formatted_response))
         encoded_response = formatted_response.encode(self.encoding)
         return (encoded_response, formatted_response)
