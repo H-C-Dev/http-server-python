@@ -170,14 +170,6 @@ class HTTPRequestParser:
         if EarlyHintsClient.FIREFOX.value.upper() in user_agent.upper():
             return True
         return False
-    
-    def _set_cache_query(self, query, path, method) -> str:
-        if len(query.keys()) > 0 and method == 'GET':
-            cache_query = method + ":" + f"{path}?" 
-            for k in query:
-                cache_query += f"{k}={query[k]}&"
-            cache_query = cache_query[:-1]
-        return cache_query
 
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Any:
         body, lines = await self._extract_request_lines_and_body(reader)
@@ -186,22 +178,11 @@ class HTTPRequestParser:
         is_early_hints_supported = self._client_supports_early_hints(headers.user_agent)
         body = await self._extract_body(body, headers, reader)
         path, query = self._extract_path_and_query(path)
-
-        cache_query = self._set_cache_query(query, path, method)
-        
         is_localhost = self._is_client_localhost(writer)
         request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
         serve_file = self.container.get(ServeFile)
-
-    
-
-
-
-
         if serve_file.is_static_prefix(path):
             return (request, None, serve_file.is_static_prefix(path), None)
-        (handler, parameters, local_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
+        (handler, parameters, local_middlewares, cache_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
         request.params = parameters
-
-
-        return (request, handler, False, local_middlewares)
+        return (request, handler, False, local_middlewares, cache_middlewares)
