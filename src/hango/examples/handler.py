@@ -2,6 +2,7 @@ from hango.http   import Response
 from hango.core  import type_safe
 import asyncio
 from hango.example_entry_point import server
+from hango.middleware import cache_middleware
 
 
 @server.set_global_middlewares
