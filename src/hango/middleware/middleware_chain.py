@@ -1,7 +1,6 @@
 import asyncio
 from .cors import cors_middleware
 
-
 DEFAULT_MIDDLEWARES = [cors_middleware]
 
 class MiddlewareChain:

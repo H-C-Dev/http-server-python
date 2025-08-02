@@ -1,10 +1,7 @@
 from hango.http   import Response
 from hango.core  import type_safe
-from hango.middleware import cors_middleware
 import asyncio
 from hango.example_entry_point import server
-from hango.http import Forbidden
-from hango.middleware import cache_middleware
 
 
 @server.set_global_middlewares
