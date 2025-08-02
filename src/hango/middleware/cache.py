@@ -4,8 +4,9 @@ import asyncio
 def _set_cache_query(query: dict, path: str, method: str) -> str:
     # if len(query.keys()) > 0 and method == 'GET':
     if method == 'GET':
-        cache_query = method + ":" + f"{path}?" 
+        cache_query = method + ":" + path
         if len(query.keys()) > 0:
+            cache_query += "?"
             for k in query:
                 for v in query[k]:
                     cache_query += f"{k}={v}&"
@@ -14,7 +15,7 @@ def _set_cache_query(query: dict, path: str, method: str) -> str:
     return None
 
 TTL = 3600
-
+import json
 def cache_middleware(handler, cache):
     print(cache)
     if cache is None:
@@ -27,16 +28,31 @@ def cache_middleware(handler, cache):
                 response = await response
                 return response
         else:
-            cached = await cache.get(cache_query)
-            if cached:
+            raw = await cache.get(cache_query)
+            if raw:
                 print("Cache hitted")
-                return Response(body=cached, status_code="200")
+                payload = json.loads(raw)
+                response = Response(                
+                    status_code=payload["status_code"],
+                    content_type=payload.get("content_type"),
+                    body=payload.get("body")
+                    )
+                response.cors_header = payload.get("cors_header")
+                return response
             else:
                 response = handler(request)
                 if asyncio.iscoroutine(response):
                     response = await response
                 print("Cache creating")
-                await cache.set(cache_query, response.body, ex=TTL)
+
+                to_cache = {
+                    "status_code": response.status_code,
+                    "content_type": response.content_type,
+                    "body": response.body,
+                    "cors_header": response.cors_header,
+                }
+                
+                await cache.set(cache_query, json.dumps(to_cache), ex=TTL)
                 print("cache created")
                 return response
     return wrapped
