@@ -1,6 +1,6 @@
 from hango.server import app
 
-server = app()
+server = app(cache='redis')
 from hango.examples.handler import *
 
 if __name__ == "__main__":

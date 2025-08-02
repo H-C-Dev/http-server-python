@@ -2,6 +2,7 @@ from hango.http   import Response
 from hango.core  import type_safe
 import asyncio
 from hango.example_entry_point import server
+from hango.middleware import cache_middleware
 
 
 @server.set_global_middlewares
@@ -26,11 +27,12 @@ def local_middleware(handler):
     return wrapped
 
 
+
 @server.GET("/favicon.ico")
 def catch_favicon(request) -> Response:
     return Response(body="a favicon is detected", status_code="200")
 
-@server.GET("/test", local_middlewares=[local_middleware])
+@server.GET("/test", local_middlewares=[local_middleware], cache_middlewares=[cache_middleware])
 @type_safe
 def return_hello_world(request) -> Response:
     return Response(body="hello world", status_code="200")

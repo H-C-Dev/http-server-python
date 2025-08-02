@@ -159,7 +159,8 @@ class HTTPRequestParser:
         if "?" in raw_path:
             path, qs = raw_path.split("?", 1)
             query = parse_qs(qs, keep_blank_values=True)
-            return (path, query)
+            sorted_query = {k: v for k, v in sorted(list(query.items()))}
+            return (path, sorted_query)
         else:
             path = raw_path
             query = {}
@@ -182,6 +183,6 @@ class HTTPRequestParser:
         serve_file = self.container.get(ServeFile)
         if serve_file.is_static_prefix(path):
             return (request, None, serve_file.is_static_prefix(path), None)
-        (handler, parameters, local_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
+        (handler, parameters, local_middlewares, cache_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
         request.params = parameters
-        return (request, handler, False, local_middlewares)
+        return (request, handler, False, local_middlewares, cache_middlewares)
