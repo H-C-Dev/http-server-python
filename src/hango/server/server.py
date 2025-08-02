@@ -37,10 +37,10 @@ class HTTPServer:
     async def _process_request(self, reader, writer) -> Request:
         request = None
         try:
-            (request, handler, is_static_prefix, local_middlewares) = \
+            (request, handler, is_static_prefix, local_middlewares, cache_middlewares) = \
                 await self.parse_request(reader, writer)
             response = \
-                await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares)
+                await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
             response = self.handle_error_response(http_e)
@@ -84,7 +84,7 @@ class HTTPServer:
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         raise NotImplementedError
 
-    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares):
+    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares):
         raise NotImplementedError
 
     def handle_error_response(self, http_error):
@@ -131,8 +131,9 @@ class Server(HTTPServer):
         self.container.get(MiddlewareChain).add_hook_after_each_handler(func)
         return func
 
-    async def _invoke_handler(self, handler, request, local_middlewares) -> Response:
-        wrapped = self.container.get(MiddlewareChain).wrap_handler(handler, local_middlewares, request)
+    async def _invoke_handler(self, handler, request, local_middlewares, cache_middlewares) -> Response:
+        cache = self.container.get('cache')
+        wrapped = self.container.get(MiddlewareChain).wrap_handler(handler, local_middlewares, request, cache_middlewares, cache)
         try:
             if asyncio.iscoroutinefunction(wrapped):
                 response = await wrapped(request)
@@ -162,7 +163,7 @@ class Server(HTTPServer):
         encoded_response, _ = early_hints_response.set_encoded_response()
         await super().server_respond(encoded_response, writer, is_early_hints=True)
     
-    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[]) -> bytes:
+    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[], cache_middlewares=[]) -> bytes:
         # run the global hook before handler
 
         (method, path, is_early_hints_supported) = self._extract_method_path(request)
@@ -170,7 +171,7 @@ class Server(HTTPServer):
         if method == MethodType.GET.value and is_static_prefix:
             response = await self._handle_static_request(path, writer, is_early_hints_supported)
         elif method == MethodType.POST.value or method == MethodType.GET.value:
-            response = await self._invoke_handler(handler, request, local_middlewares)
+            response = await self._invoke_handler(handler, request, local_middlewares, cache_middlewares)
         else:
             raise MethodNotAllowed(f"{method}")
         
@@ -187,11 +188,13 @@ class Server(HTTPServer):
                 await self._handle_early_hints_response(writer, hints)
             response = Response(body=file_bytes, status_code="200", content_type=content_type)
             return response
+    
+
 
     
-    def GET(self, template: str, local_middlewares=[]):
+    def GET(self, template: str, local_middlewares=[], cache_middlewares=[]):
         def decorator(func):
-            self.container.get(RouteToHandler).add_route(template, func, MethodType.GET.value, local_middlewares)
+            self.container.get(RouteToHandler).add_route(template, func, MethodType.GET.value, local_middlewares, cache_middlewares)
             return func
         return decorator
 
