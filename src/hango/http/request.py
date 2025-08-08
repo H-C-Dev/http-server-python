@@ -182,7 +182,8 @@ class HTTPRequestParser:
         request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
         serve_file = self.container.get(ServeFile)
         if serve_file.is_static_prefix(path):
-            return (request, None, serve_file.is_static_prefix(path), None)
+            return (request, None, True, None, None)
         (handler, parameters, local_middlewares, cache_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
+
         request.params = parameters
         return (request, handler, False, local_middlewares, cache_middlewares)
