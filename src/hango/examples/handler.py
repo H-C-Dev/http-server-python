@@ -2,8 +2,8 @@ from hango.http   import Response
 from hango.core  import type_safe
 import asyncio
 from hango.example_entry_point import server
-from hango.middleware import cache_middleware
-
+from hango.middleware import  CacheHelper
+from hango.utils import is_coroutine
 
 @server.set_global_middlewares
 def foo_middleware(handler):
@@ -20,11 +20,18 @@ def foo_middleware(handler):
 def local_middleware(handler):
     async def wrapped(request):
         print("[LOCAL Middleware] mw says hello to handler for:", request)
-        response = handler(request)
-        if asyncio.iscoroutine(response):
-             response = await response
+        response = await is_coroutine(handler, request)
         return response
     return wrapped
+
+
+def cache_middleware(handler, cache):
+    async def wrapped(request):
+        cache_helper = CacheHelper(cache)
+        response = await cache_helper.handle_cache(request, handler, 3600)
+        return response
+    return wrapped
+        
 
 
 
