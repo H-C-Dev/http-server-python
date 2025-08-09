@@ -1,13 +1,17 @@
 import asyncio
 from .cors import cors_middleware
+from .session_middleware import make_session_middleware
+from hango.session import SessionStore
 
 DEFAULT_MIDDLEWARES = [cors_middleware]
 
 class MiddlewareChain:
-    def __init__(self):
+    def __init__(self, session_store: SessionStore=None):
         self.global_middlewares = []
         self._hook_before_each_handler = []
         self._hook_after_each_handler = []
+        self.session_store = session_store
+        self._defaults_added = False
     
 
     def add_hook_before_each_handler(self, func):
@@ -23,15 +27,21 @@ class MiddlewareChain:
 
     
     def add_default_middlewares(self):
+        if self._defaults_added:       
+            return
         for middleware in DEFAULT_MIDDLEWARES:
             self.global_middlewares.append(middleware)
+        self.global_middlewares.append(make_session_middleware(self.session_store))
+
+        print(self.global_middlewares)
+        self._defaults_added = True
 
     def wrap_handler(self, handler, local_middlewares, request, cache_middlewares, cache):
 
         for hook in self._hook_before_each_handler:
             hook(request)
 
-        self.add_default_middlewares()
+
 
         wrapped = handler
 
