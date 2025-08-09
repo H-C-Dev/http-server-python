@@ -1,7 +1,7 @@
 from typing import Tuple
 import os
 from hango.core import STATIC_ROOT, SERVER_ROOT
-from hango.http import NotFound, InternalServerError
+from hango.custom_http import NotFound, InternalServerError
 from hango.core import EXTENSION_TO_MIME
 import re
 
