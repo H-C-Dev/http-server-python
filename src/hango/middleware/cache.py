@@ -1,4 +1,4 @@
-from hango.http import Response, Request
+from hango.custom_http import Response, Request
 import json
 from hango.utils import is_coroutine
 
