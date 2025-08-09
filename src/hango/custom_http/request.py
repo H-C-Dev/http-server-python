@@ -152,7 +152,6 @@ class HTTPRequestParser:
             name = name.strip().lower()
             value = value.lstrip()
             if setter_map.get(name):
-                print(name, " HEADER NAME")
                 setter_map[name](value)
 
         self._set_cookie_header(headers.set_cookie, headers.cookie_part)
