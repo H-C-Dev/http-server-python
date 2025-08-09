@@ -2,7 +2,7 @@ import pytest
 from hango.server import HTTPServer, Server
 from unittest.mock import AsyncMock, MagicMock, Mock
 import asyncio
-from hango.http import ResponseHeaders, Response, EarlyHintsResponse
+from hango.custom_http import ResponseHeaders, Response, EarlyHintsResponse
 
 
 @pytest.fixture

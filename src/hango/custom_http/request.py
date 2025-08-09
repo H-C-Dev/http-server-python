@@ -1,22 +1,28 @@
 from hango.core import EarlyHintsClient, ServiceContainer
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
-from hango.http import HTTPVersionNotSupported
+from hango.custom_http import HTTPVersionNotSupported
 from hango.routing import RouteToHandler
 from dataclasses import dataclass, field
 from typing import Optional, Any
-from hango.http import Forbidden
+from hango.custom_http import Forbidden
 from hango.utils import ServeFile
-
+from .cookie import parse_cookie
+from hango.session import LazySession
 @dataclass
 class RequestHeaders:
-    content_type: Optional[str] = None
-    user_agent: Optional[str] = None
-    accept: Optional[str] = None
-    host: Optional[str] = None
-    accept_encoding: Optional[str] = None
-    connection: Optional[str] = None
-    content_length: Optional[str] = None
+    content_type: str | None = None
+    user_agent: str | None = None
+    accept: str | None = None
+    host: str | None = None
+    accept_encoding: str | None = None
+    connection: str | None = None
+    content_length: str | None = None
+    cookie: dict[str, str] = field(default_factory=dict)
+    cookie_part: list[str] = field(default_factory=list)
+
+
+    
 
     def set_content_type(self, content_type: str):
         self.content_type = content_type
@@ -38,6 +44,14 @@ class RequestHeaders:
     
     def set_content_length(self, content_length: str):
         self.content_length = content_length
+
+
+    def set_cookie_part(self, cookie: str):
+        self.cookie_part.append(cookie)
+
+    def set_cookie(self, cookie: dict[str, str]):
+        self.cookie = cookie
+
 
     def get_header(self) -> dict:
         return {
@@ -61,6 +75,7 @@ class Request:
     is_early_hints_supported: bool
     params: Optional[dict] = field(default_factory=dict)
     is_localhost: bool = False
+    session: LazySession | None = None
 
 
 class HTTPRequestParser:
@@ -84,7 +99,7 @@ class HTTPRequestParser:
         return data
         
     def _separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
-        headers, space, body = data.partition(b"\r\n\r\n")
+        headers, _, body = data.partition(b"\r\n\r\n")
         return (headers, body)
     
     def _decode_header(self, headers: bytes) -> str:
@@ -113,8 +128,10 @@ class HTTPRequestParser:
         return (method, path, version)
     
 
-
-
+    def _set_cookie_header(self, set_cookie, cookie_part):
+        cookie_value = parse_cookie(cookie_part)
+        set_cookie(cookie_value)
+    
     
     def _parse_headers(self, lines):
         headers = RequestHeaders()
@@ -125,7 +142,8 @@ class HTTPRequestParser:
             "host": headers.set_host,
             "accept-encoding": headers.set_accept_encoding,
             "connection": headers.set_connection,
-            "content-length": headers.set_content_length 
+            "content-length": headers.set_content_length,
+            "cookie": headers.set_cookie_part
         }
         for line in lines[1:]:
             if not line:
@@ -136,6 +154,7 @@ class HTTPRequestParser:
             if setter_map.get(name):
                 setter_map[name](value)
 
+        self._set_cookie_header(headers.set_cookie, headers.cookie_part)
         return (headers)
     
     

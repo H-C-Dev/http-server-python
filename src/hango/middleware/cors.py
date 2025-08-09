@@ -1,5 +1,5 @@
 from hango.core import CORS
-from hango.http import Forbidden
+from hango.custom_http import Forbidden
 import asyncio
 
 def cors_middleware(handler):

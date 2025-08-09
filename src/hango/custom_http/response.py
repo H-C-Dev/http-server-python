@@ -5,7 +5,7 @@ from hango.utils import response_time
 from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
-    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str = "keep-alive", cors_header: Optional[str] = None):
+    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None):
         self.start_line = f"HTTP/1.1 {status_code} {status_message}\r\n"
         self.date = f"Date: {date}\r\n"
         self.server = f"Server: {server}\r\n"
@@ -13,6 +13,7 @@ class ResponseHeaders:
         self.content_length = f"Content-Length: {content_length}\r\n" if content_length else ""
         self.connection = f"Connection: {connection}\r\n"
         self.cors_header = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
+        self.set_cookie = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
     
     def return_response_headers(self) -> str:     
         return (
@@ -23,22 +24,25 @@ class ResponseHeaders:
             self.content_length  +
             self.connection + 
             self.cors_header +
+            self.set_cookie +
             "\r\n"
         )
 
 
 @dataclass
 class Response:
-    def __init__(self, status_code: Union[int, str], content_type: Optional[str] = None, body: Optional[str] = None):
+    def __init__(self, status_code: Union[int, str], content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False):
         self.encoding = 'utf-8'
         self.status_code: Union[int, str] = status_code
-        self.headers: Optional[ResponseHeaders] = None
+        self.headers: ResponseHeaders | None = None
         self.body: Optional[str] = json.dumps(body) if isinstance(body, (dict, list)) else body 
         self.content_type = (content_type if content_type
                              else ContentType.JSON.value if isinstance(body, (dict, list))
                              else ContentType.PLAIN.value if body == None
                              else None)
         self.cors_header = None
+        self.set_cookie = None
+        self.disable_default_cookie = disable_default_cookie
 
         
     def get_headers(self, content_length):
@@ -49,7 +53,8 @@ class Response:
             server="HANGO",
             content_type=self.content_type,
             content_length=content_length,
-            cors_header= self.cors_header if self.cors_header else None
+            cors_header= self.cors_header if self.cors_header else None,
+            set_cookie= self.set_cookie if self.set_cookie else None
         )
         return headers
 

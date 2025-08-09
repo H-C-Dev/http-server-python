@@ -11,6 +11,7 @@ from .http_error import (
 )
 from .request import HTTPRequestParser, Request
 from .response import Response, EarlyHintsResponse, ResponseHeaders
+from .cookie import parse_cookie, set_cookie
 
 __all__ = [
     "HTTPError",
@@ -24,9 +25,11 @@ __all__ = [
     "HTTPVersionNotSupported",
     "HTTPRequestParser",
     "CustomResponse",
-    "CustomEarlyHintsResponse"
+    "CustomEarlyHintsResponse",
     "Response",
     "Request",
     "EarlyHintsResponse",
-    "ResponseHeaders"
+    "ResponseHeaders",
+    "parse_cookie",
+    "set_cookie"
 ]

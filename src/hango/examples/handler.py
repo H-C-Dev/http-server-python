@@ -1,9 +1,14 @@
-from hango.http   import Response
+from hango.custom_http   import Response, Request, set_cookie
 from hango.core  import type_safe
 import asyncio
 from hango.example_entry_point import server
 from hango.middleware import  CacheHelper
 from hango.utils import is_coroutine
+
+
+
+
+
 
 @server.set_global_middlewares
 def foo_middleware(handler):
@@ -32,8 +37,36 @@ def cache_middleware(handler, cache):
         return response
     return wrapped
         
+@server.GET("/use-unique-cookie")
+def use_unique_cookie(request: Request) -> Response:
+    request.session.set('unique_id', "unique cookie")
+    response = Response(body="tested a cookie", status_code="200", disable_default_cookie=True)
+    set_cookie(response, "session_id", request.session.session_id)
+    return response
+
+@server.GET("/read-unique-cookie")
+def read_unique_cookie(request: Request) -> Response:
+    unique_id = request.session.get("unique_id")
+    if unique_id is None:
+        return Response(status_code="200", body="no unique_id in session")
+
+    return Response(status_code="200", body=f"unique_id={unique_id}")
 
 
+@server.GET("/test-cookie")
+def test_cookie(request: Request) -> Response:
+    request.session.set('user_id', "test-cookie")
+    return Response(body="tested a cookie", status_code="200")    
+
+
+@server.GET("/read-cookie")
+def read_cookie(request: Request) -> Response:
+    user_id = request.session.get("user_id")
+    if user_id is None:
+        return Response(status_code="200", body="no user_id in session")
+
+    return Response(status_code="200", body=f"user_id={user_id}")
+    
 
 @server.GET("/favicon.ico")
 def catch_favicon(request) -> Response:

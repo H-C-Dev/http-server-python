@@ -1,5 +1,5 @@
 import asyncio
-from hango.http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response, EarlyHintsResponse, Request
+from hango.custom_http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response, EarlyHintsResponse, Request
 from hango.core import ContentType, MethodType
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
