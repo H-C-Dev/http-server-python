@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock
 import asyncio
-from hango.http import ResponseHeaders, Response, EarlyHintsResponse, HTTPRequestParser
+from hango.custom_http import ResponseHeaders, Response, EarlyHintsResponse, HTTPRequestParser
 
 @pytest.fixture
 def mock_writer():
