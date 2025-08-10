@@ -10,6 +10,7 @@ http_status_codes_message = {
     "500": "Internal Server Error",
     "404": "Not Found",
     "405": "Method Not Allowed", 
+    "429": "Too Many Requests",
     "500": "Internal Server Error",
     "505": "HTTP Version Not Supported"
 }
