@@ -9,29 +9,29 @@ class RateLimiter:
         self.get_client_ip = client_ip or (lambda request: getattr(request.headers, "host", "unknown"))
         self.store: dict[str, deque[float]]= defaultdict(deque)
 
-    def allow(self, request: Request) -> bool:
+    def _allow(self, request: Request) -> bool:
         current_time = time.monotonic()
         client_ip = self.get_client_ip(request)
-        queue = deque[client_ip]
-        while current_time - queue[0]:
-            deque.popleft()
-        if len(queue) >= self.max_request_number:
-            return True
-        
-        return False
-    
+        queue = self.store[client_ip]
+        while queue and (current_time - queue[0] > self.period):
+            queue.popleft()
+        if len(queue) >= self.max_requests_number:
+            return False
+        queue.append(current_time)
+        return True
 
-def make_rate_limit_middleware(config: dict[str, int]):
+    async def rate_limit_handler(self, request: Request, handler: callable):
+        if self._allow(request):
+            response = await is_coroutine(handler, request)
+            return response
+        else:
+            return Response(status_code="429", body=f"Too many Requests.")
+
+def make_rate_limit_middleware(rate_limiter: RateLimiter):
     def rate_limit_middleware(handler: callable):
         async def wrapped(request: Request) -> Response:
-            max_number = config.max_requests_number
-            period = config.period
-            rate_limiter = RateLimiter(max_requests_number=max_number, period=period)
-            if rate_limiter.allow(request):
-                response = await is_coroutine(handler, request)
-                return response
-            else:
-                return Response(status_code="429", body=f"Too many Requests.")
+            response: Response = await rate_limiter.rate_limit_handler(request, handler)
+            return response
         return wrapped
     return rate_limit_middleware
 
