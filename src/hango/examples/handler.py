@@ -4,11 +4,7 @@ import asyncio
 from hango.example_entry_point import server
 from hango.middleware import  CacheHelper
 from hango.utils import is_coroutine
-
-
-
-
-
+from hango.middleware import make_rate_limit_middleware, RateLimiter
 
 @server.set_global_middlewares
 def foo_middleware(handler):
@@ -21,14 +17,12 @@ def foo_middleware(handler):
         return response
     return wrapped
 
-
 def local_middleware(handler):
     async def wrapped(request):
         print("[LOCAL Middleware] mw says hello to handler for:", request)
         response = await is_coroutine(handler, request)
         return response
     return wrapped
-
 
 def cache_middleware(handler, cache):
     async def wrapped(request):
@@ -72,7 +66,9 @@ def read_cookie(request: Request) -> Response:
 def catch_favicon(request) -> Response:
     return Response(body="a favicon is detected", status_code="200")
 
-@server.GET("/test", local_middlewares=[local_middleware], cache_middlewares=[cache_middleware])
+
+
+@server.GET("/test", local_middlewares=[local_middleware, make_rate_limit_middleware(RateLimiter(max_requests_number=1, period=10))], cache_middlewares=[cache_middleware])
 @type_safe
 def return_hello_world(request) -> Response:
     return Response(body="hello world", status_code="200")
