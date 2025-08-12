@@ -235,13 +235,12 @@ class HTTPRequestParser:
         path, query = self._extract_path_and_query(path)
         is_localhost = self._is_client_localhost(writer)
         body = body.decode(self.encoding, errors='ignore')
-        if headers.content_type and headers.content_type.lower() == 'json':
+        if headers.content_type and 'json' in headers.content_type.lower():
             body = json.loads(body)
         request = Request(method, unquote_plus(path), version, query, {}, body, {}, headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
         serve_file = self.container.get(ServeFile)
         if serve_file.is_static_prefix(path):
             return (request, None, True, None, None)
         (handler, parameters, local_middlewares, cache_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
-
         request.params = parameters
         return (request, handler, False, local_middlewares, cache_middlewares)
