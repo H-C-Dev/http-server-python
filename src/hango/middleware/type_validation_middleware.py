@@ -14,7 +14,6 @@ class Validator:
                 "fields": list(extra_fields),
                 "message": f"Unexpected fields: {', '.join(extra_fields)}. See API docs.",
             }
-        
 
         for k, v in self.schema.items():
             if k not in data:
