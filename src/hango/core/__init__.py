@@ -1,5 +1,5 @@
 from .config import SERVER_ROOT, STATIC_ROOT, PORT, HOST, REDIS_HOST, REDIS_PORT
-from .constants import CORS, http_status_codes_message, MethodType, ContentType, EarlyHintsClient, EXTENSION_TO_MIME
+from .constants import CORS, http_status_codes_message, MethodType, ContentType, EarlyHintsClient, EXTENSION_TO_MIME, allowed_content_type
 from .type_safe import type_safe
 from .container import ServiceContainer
 
@@ -17,5 +17,6 @@ __all__ = [
     "PORT",
     "HOST",
     "REDIS_HOST",
-    "REDIS_PORT"
+    "REDIS_PORT", 
+    "allowed_content_type"
 ]

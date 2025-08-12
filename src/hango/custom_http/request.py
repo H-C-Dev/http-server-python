@@ -1,7 +1,7 @@
-from hango.core import EarlyHintsClient, ServiceContainer
+from hango.core import EarlyHintsClient, ServiceContainer, allowed_content_type
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
-from hango.custom_http import HTTPVersionNotSupported
+from hango.custom_http import HTTPVersionNotSupported, BadRequest
 from hango.routing import RouteToHandler
 from dataclasses import dataclass, field
 from typing import Optional, Any
@@ -9,6 +9,8 @@ from hango.custom_http import Forbidden
 from hango.utils import ServeFile
 from .cookie import parse_cookie
 from hango.session import LazySession
+import json
+
 @dataclass
 class RequestHeaders:
     content_type: str | None = None
@@ -21,11 +23,21 @@ class RequestHeaders:
     cookie: dict[str, str] = field(default_factory=dict)
     cookie_part: list[str] = field(default_factory=list)
 
-
-    
-
     def set_content_type(self, content_type: str):
-        self.content_type = content_type
+        raw = (content_type or "").strip()
+        if not raw:
+            self.content_type = None
+            return
+        main_content_type = raw.split(";", 1)[0].strip().lower()
+        allowed = {content_type.lower() for content_type in allowed_content_type}
+        is_allowed = False
+        for pattern in allowed:
+            if self._matches_content_type(pattern, main_content_type):
+                is_allowed = True
+                break
+        if not is_allowed:
+            raise BadRequest(f"Content-Type not allowed: {content_type}")
+        self.content_type = main_content_type
 
     def set_user_agent(self, user_agent: str):
         self.user_agent = user_agent
@@ -64,13 +76,37 @@ class RequestHeaders:
             "content_length": self.content_length
         }
     
+
+    def _matches_content_type(self, allowed_pattern: str, main_content_type: str) -> bool:
+        if allowed_pattern == main_content_type:
+            return True
+        # wildcard
+        if allowed_pattern == "*/*":
+            return True
+        # pattern range -> "type/*"
+        if allowed_pattern.endswith("/*"):
+            pattern_type = allowed_pattern.split("/", 1)[0]
+            content_type = main_content_type.split("/", 1)[0]
+            return pattern_type == content_type
+            # suffix wildcard -> "*+json" -any vendor json
+        if allowed_pattern == "*+json":
+            return main_content_type.endswith("+json")
+        # type-scoped +json wildcard -> "type/*+json"
+        if allowed_pattern.endswith("/*+json"):
+            pattern_type = allowed_pattern.split("/", 1)[0]
+            content_type, conetent_sub = main_content_type.split("/", 1)
+            return pattern_type == content_type and conetent_sub.endswith("+json")
+        return False
+    
 @dataclass
 class Request:
     method: str
     path: str
     version: str
     query: dict
-    body: str
+    query_validated: dict
+    body: dict | str | None
+    body_validated: dict
     headers: RequestHeaders
     is_early_hints_supported: bool
     params: Optional[dict] = field(default_factory=dict)
@@ -198,11 +234,13 @@ class HTTPRequestParser:
         body = await self._extract_body(body, headers, reader)
         path, query = self._extract_path_and_query(path)
         is_localhost = self._is_client_localhost(writer)
-        request = Request(method, unquote_plus(path), version, query, body.decode(self.encoding, errors='ignore'), headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
+        body = body.decode(self.encoding, errors='ignore')
+        if headers.content_type and 'json' in headers.content_type.lower():
+            body = json.loads(body)
+        request = Request(method, unquote_plus(path), version, query, {}, body, {}, headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
         serve_file = self.container.get(ServeFile)
         if serve_file.is_static_prefix(path):
             return (request, None, True, None, None)
         (handler, parameters, local_middlewares, cache_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
-
         request.params = parameters
         return (request, handler, False, local_middlewares, cache_middlewares)
