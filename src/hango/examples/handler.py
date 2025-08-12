@@ -4,7 +4,8 @@ import asyncio
 from hango.example_entry_point import server
 from hango.middleware import  CacheHelper
 from hango.utils import is_coroutine
-from hango.middleware import make_rate_limit_middleware, RateLimiter
+from hango.middleware import make_rate_limit_middleware, RateLimiter, make_validate_middleware, Validator
+
 
 @server.set_global_middlewares
 def foo_middleware(handler):
@@ -81,10 +82,14 @@ def return_client_data(request) -> Response:
     print(res)
     return Response(body=request.params, status_code="200")
 
-@server.POST("/post")
+
+@server.POST("/post", local_middlewares=[make_validate_middleware([Validator(
+        schema={"hello": str}, 
+        source="body")])])
 @type_safe
 def post_endpoint(request) -> Response:
     print("[Data received from client]:", request.body)
+    print(type(request.body))
     return Response(body="hello world from post endpoint", status_code="200")
 
 @type_safe
