@@ -15,6 +15,9 @@ http_status_codes_message = {
     "505": "HTTP Version Not Supported"
 }
 
+
+allowed_content_type = ['application/json']
+
 class MethodType(Enum):
     GET = "GET"
     POST = "POST"
