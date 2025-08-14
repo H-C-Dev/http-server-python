@@ -15,7 +15,6 @@ PORT=8080
 HTTPS_PORT = 8443
 CERT_FILE = "server.crt"
 KEY_FILE = "server.key"
-DEV = True
 HEADER_SIZE=65536
 
 

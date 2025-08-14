@@ -1,5 +1,4 @@
-from hango.core import EarlyHintsClient, ServiceContainer, allowed_content_type, ENABLE_HTTPS
-from hango.server import DEV
+from hango.core import EarlyHintsClient, ServiceContainer, allowed_content_type, ENABLE_HTTPS, DEV
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.custom_http import HTTPVersionNotSupported, BadRequest
