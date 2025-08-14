@@ -1,4 +1,4 @@
-from hango.core import EarlyHintsClient, ServiceContainer, allowed_content_type
+from hango.core import EarlyHintsClient, ServiceContainer, allowed_content_type, ENABLE_HTTPS
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.custom_http import HTTPVersionNotSupported, BadRequest
@@ -49,6 +49,8 @@ class RequestHeaders:
         self.accept = accept
 
     def set_host(self, host: str):
+        if not host: 
+            raise BadRequest()
         self.host = host
     
     def set_accept_encoding(self, accept_encoding: str):
@@ -247,23 +249,38 @@ class HTTPRequestParser:
         if EarlyHintsClient.FIREFOX.value.upper() in user_agent.upper():
             return True
         return False
+    
+    def _is_https(self, writer: asyncio.StreamWriter):
+
+        if writer.get_extra_info('ssl_object') is not None or ENABLE_HTTPS == False:
+            return True
+        return False
+    
 
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Any:
+        is_localhost = self._is_client_localhost(writer)
+        is_https = self._is_https(writer)
         body_fully_read = False
+
         body, lines = await self._extract_request_lines_and_body(reader)
         method, path, version = self._extract_request_line(lines)
         headers = self._parse_headers(lines)
+
+        if not is_https and not is_localhost:
+            request = Request(method, path, version, {}, {}, None, {}, headers, False, params=None, is_localhost=is_localhost, body_fully_read=False)
+            return (request, None, False, None, None, True)
+        
         is_early_hints_supported = self._client_supports_early_hints(headers.user_agent)
         body, body_fully_read = await self._extract_body(body, body_fully_read, headers, reader)
         path, query = self._extract_path_and_query(path)
-        is_localhost = self._is_client_localhost(writer)
+
         body = body.decode(self.encoding, errors='ignore')
         if headers.content_type and 'json' in headers.content_type.lower():
             body = json.loads(body)
         request = Request(method, unquote_plus(path), version, query, {}, body, {}, headers, is_early_hints_supported, params=None, is_localhost=is_localhost, body_fully_read=body_fully_read)
         serve_file = self.container.get(ServeFile)
         if serve_file.is_static_prefix(path):
-            return (request, None, True, None, None)
+            return (request, None, True, None, None, False)
         (handler, parameters, local_middlewares, cache_middlewares) = self.container.get(RouteToHandler).match_handler(method, path)
         request.params = parameters
-        return (request, handler, False, local_middlewares, cache_middlewares)
+        return (request, handler, False, local_middlewares, cache_middlewares, False)
