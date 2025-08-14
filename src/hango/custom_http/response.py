@@ -5,16 +5,17 @@ from hango.utils import response_time
 from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
-    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None):
+    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None):
         self.start_line: str = f"HTTP/1.1 {status_code} {status_message}\r\n"
         self.date: str = f"Date: {date}\r\n"
         self.server: str = f"Server: {server}\r\n"
         self.content_type: str = f"Content-Type: {content_type}\r\n" if content_type else ""
         self.content_length: str = (f"Content-Length: {content_length}\r\n" if content_length else "Content-Length: 0\r\n")
-        self.connection: str = f"Connection: {connection}\r\n"
+        self.connection: str = f"Connection: {connection}\r\n" if connection else f"Connection: keep-alive\r\n"
         self.cors_header: str = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
         self.set_cookie: str = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
         self.transfer_encoding: str = ""
+        self.location: str = f"Location: {location}\r\n" if location else ""
     
     def return_response_headers(self) -> str:     
         return (
@@ -26,13 +27,14 @@ class ResponseHeaders:
             self.connection + 
             self.cors_header +
             self.set_cookie +
+            self.location +
             "\r\n"
         )
 
 
 @dataclass
 class Response:
-    def __init__(self, status_code: Union[int, str], content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False):
+    def __init__(self, status_code: int | str, content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False, redirect_to: str | None = None):
         self.encoding = 'utf-8'
         self.status_code: Union[int, str] = status_code
         self.headers: ResponseHeaders | None = None
@@ -45,6 +47,7 @@ class Response:
         self.set_cookie = None
         self.disable_default_cookie = disable_default_cookie
         self.transfer_encoding = ""
+        self.redirect_to = redirect_to
 
         
     def get_headers(self, content_length):
@@ -56,7 +59,9 @@ class Response:
             content_type=self.content_type,
             content_length=content_length,
             cors_header= self.cors_header if self.cors_header else None,
-            set_cookie= self.set_cookie if self.set_cookie else None
+            set_cookie= self.set_cookie if self.set_cookie else None,
+            location=self.redirect_to,
+            connection="close" if self.redirect_to else None
         )
         return headers
 
