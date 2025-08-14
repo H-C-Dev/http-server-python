@@ -146,12 +146,17 @@ class HTTPRequestParser:
 
     async def _receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
         try:
-            data = await reader.readuntil(b"\r\n\r\n")
+            data = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
+            return data
         except asyncio.IncompleteReadError as e:
-            # return what was read if the stream closed before \r\n\r\n
-            return e.partial
-        print('[RECEIVED DATA]', data)
-        return data
+            if not e.partial: 
+                raise asyncio.IncompleteReadError(partial=b"", expected=1)
+            raise BadRequest("Malformed request headers")
+        except asyncio.LimitOverrunError:
+            raise BadRequest("Header too large")
+        except asyncio.TimeoutError:
+            raise BadRequest("Header read timeout")
+        
         
     def _separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
         headers, _, body = data.partition(b"\r\n\r\n")
