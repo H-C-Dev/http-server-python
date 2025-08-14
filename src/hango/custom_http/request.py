@@ -1,4 +1,5 @@
 from hango.core import EarlyHintsClient, ServiceContainer, allowed_content_type, ENABLE_HTTPS
+from hango.server import DEV
 import asyncio
 from urllib.parse import parse_qs, unquote_plus
 from hango.custom_http import HTTPVersionNotSupported, BadRequest
@@ -256,8 +257,7 @@ class HTTPRequestParser:
         return False
     
     def _is_https(self, writer: asyncio.StreamWriter):
-
-        if writer.get_extra_info('ssl_object') is not None or ENABLE_HTTPS == False:
+        if writer.get_extra_info('ssl_object') is not None or DEV == False:
             return True
         return False
     
