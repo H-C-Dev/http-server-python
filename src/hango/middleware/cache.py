@@ -61,58 +61,5 @@ class CacheHelper:
             print("Error ocurred during setting cache") 
             response = await is_coroutine(handler, request)
         else:
-            print("xxxx")
             response = await self._handle_cache_response(handler, request, cache_key, TTL)
         return response
-
-
-
-# def cache_middleware(handler, cache):
-#     print(cache)
-#     if cache is None:
-#         return handler
-#     async def wrapped(request):
-#         pass
-
-
-
-        # cache_query = _set_cache_query(request.query, request.path, request.method)
-        # if cache_query == None:
-        #     print("Error ocurred during setting cache") 
-        #     response = handler(request)
-        #     if asyncio.iscoroutine(handler, response):
-        #         response = await response
-        #         return response
-        # else:
-        #     raw = await cache.get(cache_query)
-        #     if raw:
-        #         print("Cache hitted")
-        #         payload = json.loads(raw)
-        #         response = Response(                
-        #             status_code=payload["status_code"],
-        #             content_type=payload.get("content_type"),
-        #             body=payload.get("body")
-        #             )
-        #         response.cors_header = payload.get("cors_header")
-        #         return response
-        #     else:
-        #         response = handler(request)
-        #         if asyncio.iscoroutine(response):
-        #             response = await response
-        #         print("Cache creating")
-
-        #         to_cache = {
-        #             "status_code": response.status_code,
-        #             "content_type": response.content_type,
-        #             "body": response.body,
-        #             "cors_header": response.cors_header,
-        #         }
-                
-        #         await cache.set(cache_query, json.dumps(to_cache), ex=TTL)
-        #         print("cache created")
-        #         return response
-    # return wrapped
-
-
-
-

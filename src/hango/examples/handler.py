@@ -11,10 +11,12 @@ from hango.middleware import make_rate_limit_middleware, RateLimiter, make_valid
 def foo_middleware(handler):
     async def wrapped(request):
         print("[Middleware] mw says hello to handler for:", request)
-        response = handler(request)
+        response: Response = handler(request)
         if asyncio.iscoroutine(response):
              response = await response
-        # print("[Middleware] mw says bye to handler response:", response)
+        response.set_headers()
+        print(response.headers.return_response_headers())
+        print("[Middleware] mw says bye to handler response:", response)
         return response
     return wrapped
 

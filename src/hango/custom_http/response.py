@@ -5,15 +5,17 @@ from hango.utils import response_time
 from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
-    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None):
-        self.start_line = f"HTTP/1.1 {status_code} {status_message}\r\n"
-        self.date = f"Date: {date}\r\n"
-        self.server = f"Server: {server}\r\n"
-        self.content_type = f"Content-Type: {content_type}\r\n" if content_type else ""
-        self.content_length = f"Content-Length: {content_length}\r\n" if content_length else ""
-        self.connection = f"Connection: {connection}\r\n"
-        self.cors_header = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
-        self.set_cookie = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
+    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None):
+        self.start_line: str = f"HTTP/1.1 {status_code} {status_message}\r\n"
+        self.date: str = f"Date: {date}\r\n"
+        self.server: str = f"Server: {server}\r\n"
+        self.content_type: str = f"Content-Type: {content_type}\r\n" if content_type else ""
+        self.content_length: str = (f"Content-Length: {content_length}\r\n" if content_length else "Content-Length: 0\r\n")
+        self.connection: str = f"Connection: {connection}\r\n" if connection else f"Connection: keep-alive\r\n"
+        self.cors_header: str = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
+        self.set_cookie: str = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
+        self.transfer_encoding: str = ""
+        self.location: str = f"Location: {location}\r\n" if location else ""
     
     def return_response_headers(self) -> str:     
         return (
@@ -25,13 +27,14 @@ class ResponseHeaders:
             self.connection + 
             self.cors_header +
             self.set_cookie +
+            self.location +
             "\r\n"
         )
 
 
 @dataclass
 class Response:
-    def __init__(self, status_code: Union[int, str], content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False):
+    def __init__(self, status_code: int | str, content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False, redirect_to: str | None = None):
         self.encoding = 'utf-8'
         self.status_code: Union[int, str] = status_code
         self.headers: ResponseHeaders | None = None
@@ -43,6 +46,8 @@ class Response:
         self.cors_header = None
         self.set_cookie = None
         self.disable_default_cookie = disable_default_cookie
+        self.transfer_encoding = ""
+        self.redirect_to = redirect_to
 
         
     def get_headers(self, content_length):
@@ -54,7 +59,9 @@ class Response:
             content_type=self.content_type,
             content_length=content_length,
             cors_header= self.cors_header if self.cors_header else None,
-            set_cookie= self.set_cookie if self.set_cookie else None
+            set_cookie= self.set_cookie if self.set_cookie else None,
+            location=self.redirect_to,
+            connection="close" if self.redirect_to else None
         )
         return headers
 
@@ -64,11 +71,11 @@ class Response:
             raise ValueError(f"Invalid status code: {self.status_code}")
         
         if isinstance(self.body, bytes):
-            content_length = str(len(self.body))
-        elif not isinstance(self.body, bytes):
-            content_length = str(len(str(self.body).encode(self.encoding)))
+            content_length = len(self.body)
+        elif self.body is None:
+            content_length = 0
         else:
-            content_length = None
+            content_length = len(str(self.body).encode(self.encoding))
 
         headers = self.get_headers(content_length)
 
@@ -79,11 +86,14 @@ class Response:
         self.set_headers()
         if self.headers is None:
             raise ValueError("Response headers have not been set.")
+        header_bytes = self.headers.return_response_headers().encode(self.encoding)
+ 
         if isinstance(self.body, bytes):
-            encoded_response = self.headers.return_response_headers().encode(self.encoding) + self.body 
-            formatted_response = self.headers.return_response_headers() + "Body is a bytes object"
+            encoded_response = header_bytes + self.body
+            formatted_response = self.headers.return_response_headers() + "[binary body]"
         else:
-            formatted_response = self.headers.return_response_headers() + str(self.body)
+            body_text = "" if self.body is None else str(self.body)
+            formatted_response = self.headers.return_response_headers() + body_text
             encoded_response = formatted_response.encode(self.encoding)
         return (encoded_response, formatted_response)
 
