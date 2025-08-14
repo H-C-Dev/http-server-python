@@ -51,7 +51,7 @@ class HTTPServer:
 
         return (connection_id, connection_manager)
     
-    async def _process_request(self, reader, writer) -> tuple[Request | None, bool]:
+    async def _process_request(self, reader, writer) -> tuple[Request | None, Response | None]:
         request = None
         try:
             (request, handler, is_static_prefix, local_middlewares, cache_middlewares) = \
@@ -74,11 +74,11 @@ class HTTPServer:
         if request is None or response is None:
             return False
         
+
         connection_request = (request.headers.connection or "").lower() if request.headers.connection else ""
 
         if "close" in connection_request:
             return False
-
         connection_response = (response.headers.connection or "").lower() if response.headers.connection else ""
 
         if "close" in connection_response:
@@ -98,7 +98,7 @@ class HTTPServer:
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         connection_id, connection_manager = await self._register_connection_manager(writer)
-        
+        request = None
         try:
             while True:
                 (request, response) = await self._process_request(reader, writer)
@@ -106,6 +106,7 @@ class HTTPServer:
                 if not self._should_keep_alive(request, response):
                     break
         finally:
+
             await self._deregister_connection(connection_id, connection_manager, request, writer)
    
         await self._close_connection(writer)
@@ -155,7 +156,7 @@ class HTTPServer:
             content_type=ContentType.PLAIN.value,
             status_code=str(http_error.status_code)
         )
-        (encoded_response, response) = response.set_encoded_response()
+        (encoded_response, _) = response.set_encoded_response()
         return encoded_response, response
     
 
@@ -239,7 +240,7 @@ class Server(HTTPServer):
         
         await self.container.get(MiddlewareChain).wrap_response(request, response)
         
-        (encoded_response, response) = response.set_encoded_response()
+        (encoded_response, _) = response.set_encoded_response()
  
         return (encoded_response, response)
     
@@ -274,24 +275,43 @@ class Server(HTTPServer):
             print(f"Server is up and running. {http_msg}{https_msg}")
 
             loop = asyncio.get_running_loop()
+            stop = asyncio.Event() 
+
             def _shutdown():
                 print("\nShutting down...")
                 try:
                     if http_server:
-                        http_server.close()
+                        http_server.close()     
                     if https_server:
                         https_server.close()
-                except Exception as e:
-                    print(f"Error during shutdown: {e}")
+                finally:
+                
+                    try:
+                        stop.set()
+                    except Exception:
+                        pass
 
             try:
                 loop.add_signal_handler(signal.SIGINT, _shutdown)
                 loop.add_signal_handler(signal.SIGTERM, _shutdown)
             except NotImplementedError:
                 pass
-            await http_server.wait_closed()
+
+            await stop.wait()
+
+            exec_ = getattr(self, "_executor", None)
+            if exec_ is not None:
+                try:
+                    exec_.shutdown(wait=False, cancel_futures=True)
+                except TypeError:
+                    exec_.shutdown(wait=False)
+
+
+            if http_server:
+                await http_server.wait_closed()
             if https_server:
                 await https_server.wait_closed()
+
             print("The server has been closed.")
+
         asyncio.run(main())
-    
