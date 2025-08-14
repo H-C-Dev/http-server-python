@@ -8,7 +8,15 @@ from typing import Tuple, Any
 from hango.middleware import MiddlewareChain
 from .connection_manager import ConnectionManager
 import signal
+import ssl
+
+ENABLE_HTTPS = False
 PORT=8080
+HTTPS_PORT = 8443
+CERT_FILE = "server.crt"
+KEY_FILE = "server.key"
+
+
 
 class HTTPServer:
     def __init__(self, host, port, container, backlog=5):
@@ -16,6 +24,15 @@ class HTTPServer:
         self.port = port
         self.backlog = backlog
         self.container = container
+
+    def _build_ssl_context(self) -> ssl.SSLContext:
+        if CERT_FILE and KEY_FILE:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
+            return context
+        
+        else:
+            raise FileNotFoundError("SSL CERT or KEY FILE is not found. Or disable HTTPS to continue.")
 
     async def _register_connection_manager(self, writer: asyncio.StreamWriter) -> Tuple[int, ConnectionManager]:
         connection_manager = None
@@ -34,57 +51,102 @@ class HTTPServer:
 
         return (connection_id, connection_manager)
     
-    async def _process_request(self, reader, writer) -> Request:
+    async def _process_request(self, reader, writer) -> tuple[Request | None, bool]:
         request = None
         try:
             (request, handler, is_static_prefix, local_middlewares, cache_middlewares) = \
                 await self.parse_request(reader, writer)
-            response = \
+            encoded_response, response = \
                 await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
-            response = self.handle_error_response(http_e)
+            encoded_response, response = self.handle_error_response(http_e)
         except Exception as server_e:
             print(f'Internal Error: {server_e}')
-            response = self.handle_error_response(InternalServerError())
-        await self.server_respond(response, writer)
-        return request
+            encoded_response, response = self.handle_error_response(InternalServerError())
+            
+        await self.server_respond(encoded_response, writer)
+        return (request, response)
         
-    async def _clean_up_connection(self, connection_id, connection_manager, request, writer):
+
+    def _should_keep_alive(self, request: Request, response: Response) -> bool:
+
+        if request is None or response is None:
+            return False
+        
+        connection_request = (request.headers.connection or "").lower() if request.headers.connection else ""
+
+        if "close" in connection_request:
+            return False
+
+        connection_response = (response.headers.connection or "").lower() if response.headers.connection else ""
+
+        if "close" in connection_response:
+            return False
+        
+
+        transfer_encoding = (getattr(response.headers, "transfer_encoding", "") or "").lower()
+        has_length = bool(getattr(response.headers, "content_length", "")) or ("chunked" in transfer_encoding)
+        if not has_length:
+            return False
+        return True
+        
+    async def _deregister_connection(self, connection_id, connection_manager, request, writer):
             if connection_manager:
                 print(f"Deregistering connection {connection_id}")
-                await connection_manager.deregister(connection_id)
-            if request and request.headers.connection != 'keep-alive':
-                await self._close_connection(writer)
+                await connection_manager.deregister(connection_id)                
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         connection_id, connection_manager = await self._register_connection_manager(writer)
+        
         try:
-            request = await self._process_request(reader, writer)
+            while True:
+                (request, response) = await self._process_request(reader, writer)
+
+                if not self._should_keep_alive(request, response):
+                    break
         finally:
-            await self._clean_up_connection(connection_id, connection_manager, request, writer)
+            await self._deregister_connection(connection_id, connection_manager, request, writer)
+   
+        await self._close_connection(writer)
+        print("Socket has been closed.")
 
     async def server_respond(self, response: bytes, writer: asyncio.StreamWriter, is_early_hints:bool=False):
         await self._send_response(response, writer)
-        await self._close_connection(writer, is_early_hints)
+        # await self._close_connection(writer, is_early_hints)
 
     async def _send_response(self, response, writer):
         writer.write(response)
         await writer.drain()
 
-    async def _close_connection(self, writer, is_early_hints:bool=False):
-        if not is_early_hints:
-            writer.close()
-            await writer.wait_closed()
+    async def _close_connection(self, writer):
+        writer.close()
+        await writer.wait_closed()
+            
 
     async def init_server(self):
-        server = await asyncio.start_server(client_connected_cb=self._handle_client, host=self.host, port=self.port) 
-        return server
+        https_server = None
+        if ENABLE_HTTPS == True:
+            ssl_context = self._build_ssl_context()
+            https_server = await asyncio.start_server(
+                client_connected_cb=self._handle_client, 
+                host=self.host, 
+                port=HTTPS_PORT, 
+                ssl=ssl_context
+            ) 
 
-    async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        http_server = await asyncio.start_server(
+            client_connected_cb=self._handle_client, 
+            host=self.host, 
+            port=PORT
+        )
+
+        return (https_server, http_server)
+
+    async def parse_request(self):
         raise NotImplementedError
 
-    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares):
+    async def handle_request(self):
         raise NotImplementedError
 
     def handle_error_response(self, http_error):
@@ -93,8 +155,8 @@ class HTTPServer:
             content_type=ContentType.PLAIN.value,
             status_code=str(http_error.status_code)
         )
-        (encoded_response, _) = response.set_encoded_response()
-        return encoded_response
+        (encoded_response, response) = response.set_encoded_response()
+        return encoded_response, response
     
 
 class Server(HTTPServer):
@@ -163,7 +225,7 @@ class Server(HTTPServer):
         encoded_response, _ = early_hints_response.set_encoded_response()
         await super().server_respond(encoded_response, writer, is_early_hints=True)
     
-    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[], cache_middlewares=[]) -> bytes:
+    async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[], cache_middlewares=[]) -> tuple[bytes, Response]:
         # run the global hook before handler
 
         (method, path, is_early_hints_supported) = self._extract_method_path(request)
@@ -177,9 +239,9 @@ class Server(HTTPServer):
         
         await self.container.get(MiddlewareChain).wrap_response(request, response)
         
-        (encoded_response, _) = response.set_encoded_response()
+        (encoded_response, response) = response.set_encoded_response()
  
-        return encoded_response
+        return (encoded_response, response)
     
 
     async def _handle_static_request(self, path, writer, is_early_hints_supported):
@@ -203,19 +265,33 @@ class Server(HTTPServer):
             self.container.get(RouteToHandler).add_route(template, func, MethodType.POST.value, local_middlewares)
             return func
         return decorator
-    
 
     def start_server(self):
         async def main():
-            server_obj = await self.init_server()
-            print("Server is up and running.")
+            (https_server, http_server) = await self.init_server()
+            http_msg = f"HTTP listening on {self.host}:{PORT}"
+            https_msg = f"; HTTPS on {self.host}:{HTTPS_PORT}" if https_server else ""
+            print(f"Server is up and running. {http_msg}{https_msg}")
+
             loop = asyncio.get_running_loop()
-            loop.add_signal_handler(signal.SIGINT, server_obj.close)
-            await server_obj.wait_closed()
+            def _shutdown():
+                print("\nShutting down...")
+                try:
+                    if http_server:
+                        http_server.close()
+                    if https_server:
+                        https_server.close()
+                except Exception as e:
+                    print(f"Error during shutdown: {e}")
+
+            try:
+                loop.add_signal_handler(signal.SIGINT, _shutdown)
+                loop.add_signal_handler(signal.SIGTERM, _shutdown)
+            except NotImplementedError:
+                pass
+            await http_server.wait_closed()
+            if https_server:
+                await https_server.wait_closed()
             print("The server has been closed.")
-        
         asyncio.run(main())
     
-
-
-
