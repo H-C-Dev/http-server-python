@@ -16,6 +16,7 @@ HTTPS_PORT = 8443
 CERT_FILE = "server.crt"
 KEY_FILE = "server.key"
 DEV = True
+HEADER_SIZE=65536
 
 
 
@@ -47,6 +48,8 @@ class HTTPServer:
         if connection_manager:
             try:
                 await connection_manager.register(connection_id)
+                if hasattr(connection_manager, "register_writer"):
+                    await connection_manager.register_writer(connection_id, writer)
             except RuntimeError:
                 print("Maximum connections reached, closing connection.")
                 writer.close()
@@ -74,6 +77,9 @@ class HTTPServer:
             else:
                 encoded_response, response = \
                     await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
+        except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
+            print("Server will be closed.")
+            return (None, None)
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
             encoded_response, response = self.handle_error_response(http_e)
@@ -122,8 +128,9 @@ class HTTPServer:
         try:
             while True:
                 (request, response) = await self._process_request(reader, writer)
-
-                if not self._should_keep_alive(request, response):
+                if request is None and response is None:
+                    break
+                if self._shutting_down or not self._should_keep_alive(request, response):
                     break
         finally:
 
@@ -138,7 +145,12 @@ class HTTPServer:
 
     async def _send_response(self, response, writer):
         writer.write(response)
-        await writer.drain()
+        if self._shutting_down or writer.is_closing():
+            return
+        try:
+            await writer.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            pass
 
     async def _close_connection(self, writer):
         writer.close()
@@ -159,7 +171,8 @@ class HTTPServer:
         http_server = await asyncio.start_server(
             client_connected_cb=self._handle_client, 
             host=self.host, 
-            port=PORT
+            port=PORT,
+            limit=HEADER_SIZE
         )
 
         return (https_server, http_server)
@@ -299,13 +312,13 @@ class Server(HTTPServer):
 
             def _shutdown():
                 print("\nShutting down...")
+                self._shutting_down = True
                 try:
                     if http_server:
                         http_server.close()     
                     if https_server:
                         https_server.close()
                 finally:
-                
                     try:
                         stop.set()
                     except Exception:
@@ -318,6 +331,16 @@ class Server(HTTPServer):
                 pass
 
             await stop.wait()
+
+            try:
+                connection_manager = self.container.get(ConnectionManager)
+            except Exception:
+                connection_manager = None
+            if connection_manager and hasattr(connection_manager, "close_all"):
+                try:
+                    await connection_manager.close_all()
+                except Exception as e:
+                    print(f"Error closing active connections: {e}")
 
             exec_ = getattr(self, "_executor", None)
             if exec_ is not None:
