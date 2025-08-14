@@ -6,15 +6,15 @@ from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
     def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None):
-        self.start_line = f"HTTP/1.1 {status_code} {status_message}\r\n"
-        self.date = f"Date: {date}\r\n"
-        self.server = f"Server: {server}\r\n"
-        self.content_type = f"Content-Type: {content_type}\r\n" if content_type else ""
-        self.content_length = (f"Content-Length: {content_length}\r\n" if content_length else "Content-Length: 0\r\n")
-        self.connection = f"Connection: {connection}\r\n"
-        self.cors_header = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
-        self.set_cookie = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
-        self.transfer_encoding = ""
+        self.start_line: str = f"HTTP/1.1 {status_code} {status_message}\r\n"
+        self.date: str = f"Date: {date}\r\n"
+        self.server: str = f"Server: {server}\r\n"
+        self.content_type: str = f"Content-Type: {content_type}\r\n" if content_type else ""
+        self.content_length: str = (f"Content-Length: {content_length}\r\n" if content_length else "Content-Length: 0\r\n")
+        self.connection: str = f"Connection: {connection}\r\n"
+        self.cors_header: str = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
+        self.set_cookie: str = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
+        self.transfer_encoding: str = ""
     
     def return_response_headers(self) -> str:     
         return (
@@ -44,6 +44,7 @@ class Response:
         self.cors_header = None
         self.set_cookie = None
         self.disable_default_cookie = disable_default_cookie
+        self.transfer_encoding = ""
 
         
     def get_headers(self, content_length):
@@ -65,11 +66,11 @@ class Response:
             raise ValueError(f"Invalid status code: {self.status_code}")
         
         if isinstance(self.body, bytes):
-            content_length = str(len(self.body))
-        elif not isinstance(self.body, bytes):
-            content_length = str(len(str(self.body).encode(self.encoding)))
+            content_length = len(self.body)
+        elif self.body is None:
+            content_length = 0
         else:
-            content_length = None
+            content_length = len(str(self.body).encode(self.encoding))
 
         headers = self.get_headers(content_length)
 
@@ -80,11 +81,14 @@ class Response:
         self.set_headers()
         if self.headers is None:
             raise ValueError("Response headers have not been set.")
+        header_bytes = self.headers.return_response_headers().encode(self.encoding)
+ 
         if isinstance(self.body, bytes):
-            encoded_response = self.headers.return_response_headers().encode(self.encoding) + self.body 
-            formatted_response = self.headers.return_response_headers() + "Body is a bytes object"
+            encoded_response = header_bytes + self.body
+            formatted_response = self.headers.return_response_headers() + "[binary body]"
         else:
-            formatted_response = self.headers.return_response_headers() + str(self.body)
+            body_text = "" if self.body is None else str(self.body)
+            formatted_response = self.headers.return_response_headers() + body_text
             encoded_response = formatted_response.encode(self.encoding)
         return (encoded_response, formatted_response)
 
