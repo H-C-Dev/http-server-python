@@ -1,6 +1,6 @@
 import asyncio
 from hango.custom_http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response, EarlyHintsResponse, Request
-from hango.core import ContentType, MethodType
+from hango.core import ContentType, MethodType, HOST
 from hango.routing import RouteToHandler
 from hango.utils import ServeFile
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
@@ -15,6 +15,7 @@ PORT=8080
 HTTPS_PORT = 8443
 CERT_FILE = "server.crt"
 KEY_FILE = "server.key"
+DEV = True
 
 
 
@@ -24,6 +25,7 @@ class HTTPServer:
         self.port = port
         self.backlog = backlog
         self.container = container
+        self._shutting_down = False
 
     def _build_ssl_context(self) -> ssl.SSLContext:
         if CERT_FILE and KEY_FILE:
@@ -51,13 +53,27 @@ class HTTPServer:
 
         return (connection_id, connection_manager)
     
+    async def _handle_redirect(self, request: Request):
+        host = request.headers.host
+        if DEV and host and f":{PORT}" in host:
+            host = host.split(":", maxsplit=1)[0] + f":{HTTPS_PORT}"
+        https_path = f"https://{host}{request.path}"
+        response = Response(status_code=308, disable_default_cookie=True, redirect_to=https_path)
+        (encoded_response, _) = response.set_encoded_response()
+
+        return (encoded_response, response)
+    
+
     async def _process_request(self, reader, writer) -> tuple[Request | None, Response | None]:
         request = None
         try:
-            (request, handler, is_static_prefix, local_middlewares, cache_middlewares) = \
+            (request, handler, is_static_prefix, local_middlewares, cache_middlewares, redirect) = \
                 await self.parse_request(reader, writer)
-            encoded_response, response = \
-                await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
+            if redirect:
+                encoded_response, response = await self._handle_redirect(request)
+            else:
+                encoded_response, response = \
+                    await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
             encoded_response, response = self.handle_error_response(http_e)
@@ -76,6 +92,8 @@ class HTTPServer:
         
 
         connection_request = (request.headers.connection or "").lower() if request.headers.connection else ""
+        
+        if not getattr(request, "body_fully_read", True): return False
 
         if "close" in connection_request:
             return False
@@ -86,7 +104,9 @@ class HTTPServer:
         
 
         transfer_encoding = (getattr(response.headers, "transfer_encoding", "") or "").lower()
-        has_length = bool(getattr(response.headers, "content_length", "")) or ("chunked" in transfer_encoding)
+
+        content_length = getattr(response.headers, "content_length", "") or ""
+        has_length = bool(content_length) or ("chunked" in transfer_encoding)
         if not has_length:
             return False
         return True
@@ -154,7 +174,7 @@ class HTTPServer:
         response = Response(
             body=http_error.message,
             content_type=ContentType.PLAIN.value,
-            status_code=str(http_error.status_code)
+            status_code=int(http_error.status_code)
         )
         (encoded_response, _) = response.set_encoded_response()
         return encoded_response, response
@@ -202,9 +222,9 @@ class Server(HTTPServer):
                 response = await wrapped(request)
                 return response
             else:
-                if self.executor:
+                if self._executor:
                     loop = asyncio.get_running_loop()
-                    response = await loop.run_in_executor(self.executor, wrapped, request)
+                    response = await loop.run_in_executor(self._executor, wrapped, request)
                     return response
                 else:
                     response = wrapped(request)
