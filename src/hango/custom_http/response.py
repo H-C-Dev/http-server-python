@@ -5,7 +5,7 @@ from hango.utils import response_time
 from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
-    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None):
+    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None, hsts: bool = False, hsts_max_age: int = 31536000):
         self.start_line: str = f"HTTP/1.1 {status_code} {status_message}\r\n"
         self.date: str = f"Date: {date}\r\n"
         self.server: str = f"Server: {server}\r\n"
@@ -16,6 +16,9 @@ class ResponseHeaders:
         self.set_cookie: str = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
         self.transfer_encoding: str = ""
         self.location: str = f"Location: {location}\r\n" if location else ""
+        self.hsts_max_age: int = hsts_max_age
+        self.hsts: str = f"Strict-Transport-Security: max-age={hsts_max_age}; includeSubDomains\r\n" if hsts else ""
+
     
     def return_response_headers(self) -> str:     
         return (
@@ -28,13 +31,14 @@ class ResponseHeaders:
             self.cors_header +
             self.set_cookie +
             self.location +
+            self.hsts +
             "\r\n"
         )
 
 
 @dataclass
 class Response:
-    def __init__(self, status_code: int | str, content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False, redirect_to: str | None = None):
+    def __init__(self, status_code: int | str, content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False, redirect_to: str | None = None, is_https: bool = False):
         self.encoding = 'utf-8'
         self.status_code: Union[int, str] = status_code
         self.headers: ResponseHeaders | None = None
@@ -48,6 +52,7 @@ class Response:
         self.disable_default_cookie = disable_default_cookie
         self.transfer_encoding = ""
         self.redirect_to = redirect_to
+        self._is_https: bool = False
 
         
     def get_headers(self, content_length):
@@ -61,7 +66,9 @@ class Response:
             cors_header= self.cors_header if self.cors_header else None,
             set_cookie= self.set_cookie if self.set_cookie else None,
             location=self.redirect_to,
-            connection="close" if self.redirect_to else None
+            connection="close" if self.redirect_to else None,
+            hsts=self._is_https
+
         )
         return headers
 
@@ -82,7 +89,9 @@ class Response:
         self.headers = headers
         
 
-    def set_encoded_response(self) -> Tuple[bytes, str]:
+    def set_encoded_response(self, is_https) -> Tuple[bytes, str]:
+        if is_https:
+            self._is_https = True
         self.set_headers()
         if self.headers is None:
             raise ValueError("Response headers have not been set.")
@@ -109,7 +118,9 @@ class EarlyHintsResponse(Response):
         early_hints_header += "\r\n"
         return early_hints_header
 
-    def set_encoded_response(self) -> Tuple[bytes, str]:
+    def set_encoded_response(self, is_https) -> Tuple[bytes, str]:
+        if is_https:
+            self._is_https = True
         super().set_headers()
         early_hints_header = self._set_early_hints_header()
         if self.headers is None:

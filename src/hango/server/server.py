@@ -27,6 +27,7 @@ class HTTPServer:
         self.backlog = backlog
         self.container = container
         self._shutting_down = False
+        self._is_https = False
 
     def _build_ssl_context(self) -> ssl.SSLContext:
         if CERT_FILE and KEY_FILE:
@@ -62,11 +63,16 @@ class HTTPServer:
             host = host.split(":", maxsplit=1)[0] + f":{HTTPS_PORT}"
         https_path = f"https://{host}{request.path}"
         response = Response(status_code=308, disable_default_cookie=True, redirect_to=https_path)
-        (encoded_response, _) = response.set_encoded_response()
+        (encoded_response, _) = response.set_encoded_response(is_https=False)
 
         return (encoded_response, response)
     
+    def _is_https_traffic(self, writer: asyncio.StreamWriter):
+        is_tls = writer.get_extra_info('ssl_object') is not None
+        is_https_for_hsts = is_tls and not DEV
+        self._is_https = is_https_for_hsts
 
+    
     async def _process_request(self, reader, writer) -> tuple[Request | None, Response | None]:
         request = None
         try:
@@ -75,13 +81,14 @@ class HTTPServer:
             if redirect:
                 encoded_response, response = await self._handle_redirect(request)
             else:
-                encoded_response, response = \
-                    await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
+                encoded_response, response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
+
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
             print("Server will be closed.")
             return (None, None)
         except HTTPError as http_e:
             print(f"HTTP Error: {http_e}")
+            # add
             encoded_response, response = self.handle_error_response(http_e)
         except Exception as server_e:
             print(f'Internal Error: {server_e}')
@@ -123,6 +130,7 @@ class HTTPServer:
                 await connection_manager.deregister(connection_id)                
 
     async def _handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+        self._is_https_traffic(writer=writer)
         connection_id, connection_manager = await self._register_connection_manager(writer)
         request = None
         try:
@@ -189,7 +197,7 @@ class HTTPServer:
             content_type=ContentType.PLAIN.value,
             status_code=int(http_error.status_code)
         )
-        (encoded_response, _) = response.set_encoded_response()
+        (encoded_response, _) = response.set_encoded_response(is_https=self._is_https)
         return encoded_response, response
     
 
@@ -256,7 +264,7 @@ class Server(HTTPServer):
     
     async def _handle_early_hints_response(self, writer, custom_hints=[]):
         early_hints_response = EarlyHintsResponse(custom_hints)
-        encoded_response, _ = early_hints_response.set_encoded_response()
+        encoded_response, _ = early_hints_response.set_encoded_response(is_https=self._is_https)
         await super().server_respond(encoded_response, writer, is_early_hints=True)
     
     async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[], cache_middlewares=[]) -> tuple[bytes, Response]:
@@ -272,8 +280,8 @@ class Server(HTTPServer):
             raise MethodNotAllowed(f"{method}")
         
         await self.container.get(MiddlewareChain).wrap_response(request, response)
-        
-        (encoded_response, _) = response.set_encoded_response()
+
+        (encoded_response, _) = response.set_encoded_response(is_https=self._is_https)
  
         return (encoded_response, response)
     
