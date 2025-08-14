@@ -10,6 +10,8 @@ from hango.utils import ServeFile
 from .cookie import parse_cookie
 from hango.session import LazySession
 import json
+BODY_SIZE = 10 * 1024 * 1024
+
 
 @dataclass
 class RequestHeaders:
@@ -22,6 +24,7 @@ class RequestHeaders:
     content_length: str | None = None
     cookie: dict[str, str] = field(default_factory=dict)
     cookie_part: list[str] = field(default_factory=list)
+    transfer_encoding: str | None = None
 
     def set_content_type(self, content_type: str):
         raw = (content_type or "").strip()
@@ -55,6 +58,13 @@ class RequestHeaders:
         self.connection = connection
     
     def set_content_length(self, content_length: str):
+        try:
+            content_length = int(content_length) if content_length else 0
+        except ValueError:
+            raise BadRequest("Invalid Content-Length")
+        
+        if content_length < 0 or content_length > BODY_SIZE:
+            raise BadRequest(f"Content-Length exceeds limit ({BODY_SIZE} bytes)")
         self.content_length = content_length
 
 
@@ -63,6 +73,12 @@ class RequestHeaders:
 
     def set_cookie(self, cookie: dict[str, str]):
         self.cookie = cookie
+
+
+    def set_transfer_encoding(self, transfer_encoding: str):
+        if 'chunked' in transfer_encoding:
+            raise BadRequest(f"Chunked not supported yet.")
+        self.transfer_encoding = transfer_encoding
 
 
     def get_header(self) -> dict:
@@ -112,6 +128,7 @@ class Request:
     params: Optional[dict] = field(default_factory=dict)
     is_localhost: bool = False
     session: LazySession | None = None
+    body_fully_read: bool = False
 
 
 class HTTPRequestParser:
@@ -179,7 +196,8 @@ class HTTPRequestParser:
             "accept-encoding": headers.set_accept_encoding,
             "connection": headers.set_connection,
             "content-length": headers.set_content_length,
-            "cookie": headers.set_cookie_part
+            "cookie": headers.set_cookie_part,
+            "transfer-encoding": headers.set_transfer_encoding,
         }
         for line in lines[1:]:
             if not line:
@@ -202,12 +220,16 @@ class HTTPRequestParser:
         return False
 
 
-    async def _extract_body(self, body, headers, reader: asyncio.StreamReader):
+    async def _extract_body(self, body, body_fully_read, headers, reader: asyncio.StreamReader):
         content_length = int(headers.content_length) if headers.content_length != None else 0
+        remaining_bufsize = content_length - len(body)
         # carry on receiving the rest of the TCP packets if the length is bigger than what we received
         while len(body) < content_length:
-            body += await reader.read(self.bufsize)
-        return body
+            remaining_bufsize = content_length - len(body)
+            body += await reader.read(min(self.bufsize, remaining_bufsize))
+
+        body_fully_read = (len(body) == content_length)
+        return body, body_fully_read
     
     def _extract_path_and_query(self, raw_path):
         # if there is a "?", parse the query
@@ -227,17 +249,18 @@ class HTTPRequestParser:
         return False
 
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> Any:
+        body_fully_read = False
         body, lines = await self._extract_request_lines_and_body(reader)
         method, path, version = self._extract_request_line(lines)
         headers = self._parse_headers(lines)
         is_early_hints_supported = self._client_supports_early_hints(headers.user_agent)
-        body = await self._extract_body(body, headers, reader)
+        body, body_fully_read = await self._extract_body(body, body_fully_read, headers, reader)
         path, query = self._extract_path_and_query(path)
         is_localhost = self._is_client_localhost(writer)
         body = body.decode(self.encoding, errors='ignore')
         if headers.content_type and 'json' in headers.content_type.lower():
             body = json.loads(body)
-        request = Request(method, unquote_plus(path), version, query, {}, body, {}, headers, is_early_hints_supported, params=None, is_localhost=is_localhost)
+        request = Request(method, unquote_plus(path), version, query, {}, body, {}, headers, is_early_hints_supported, params=None, is_localhost=is_localhost, body_fully_read=body_fully_read)
         serve_file = self.container.get(ServeFile)
         if serve_file.is_static_prefix(path):
             return (request, None, True, None, None)

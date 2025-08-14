@@ -10,10 +10,11 @@ class ResponseHeaders:
         self.date = f"Date: {date}\r\n"
         self.server = f"Server: {server}\r\n"
         self.content_type = f"Content-Type: {content_type}\r\n" if content_type else ""
-        self.content_length = f"Content-Length: {content_length}\r\n" if content_length else ""
+        self.content_length = (f"Content-Length: {content_length}\r\n" if content_length else "Content-Length: 0\r\n")
         self.connection = f"Connection: {connection}\r\n"
         self.cors_header = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
         self.set_cookie = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
+        self.transfer_encoding = ""
     
     def return_response_headers(self) -> str:     
         return (
