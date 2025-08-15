@@ -1,4 +1,4 @@
-from hango.custom_http   import Response, Request, set_cookie
+from hango.custom_http   import Response, Request, set_cookie, HttpClient
 from hango.core  import type_safe
 import asyncio
 from hango.example_entry_point import server
@@ -115,3 +115,21 @@ def log_request(request):
 
 
 
+client = HttpClient(user_agent="HangoTest/1.0")
+
+async def get_http_bin():
+    try:
+        status, headers, body = await client.request("GET", "https://httpbin.org/get", request_id="test_123")
+        print("Status:", status)
+        print("Headers:", headers)
+        print("Body:", body.decode("utf-8"))
+    except Exception as e:
+        print("HTTPCLIENT")
+        print("Error from HttpClient: ", e)
+
+
+@server.GET("/test-http-client")
+@type_safe
+async def async_test_handler(request) -> Response:
+    await get_http_bin()
+    return Response(body="this is from async function", status_code="200")
