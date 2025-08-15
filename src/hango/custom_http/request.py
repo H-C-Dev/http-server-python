@@ -145,18 +145,45 @@ class HTTPRequestParser:
 
 
     async def _receive_byte_data(self, reader: asyncio.StreamReader) -> bytes:
+        IDLE_TIMEOUT = 5.0        
+        HEADER_TIMEOUT = 5.0     
+        MAX_HEADER_BYTES = 64 * 1024
+
+        loop = asyncio.get_running_loop()
         try:
-            data = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), timeout=5.0)
-            return data
-        except asyncio.IncompleteReadError as e:
-            if not e.partial: 
-                raise asyncio.IncompleteReadError(partial=b"", expected=1)
-            raise BadRequest("Malformed request headers")
-        except asyncio.LimitOverrunError:
-            raise BadRequest("Header too large")
+            first = await asyncio.wait_for(reader.read(1), timeout=IDLE_TIMEOUT)
         except asyncio.TimeoutError:
-            raise BadRequest("Header read timeout")
-        
+            raise asyncio.IncompleteReadError(partial=b"", expected=1)
+
+        if first == b"": 
+            raise asyncio.IncompleteReadError(partial=b"", expected=1)
+
+        buf = bytearray(first)
+        if b"\r\n\r\n" in buf:
+            return bytes(buf)
+
+        deadline = loop.time() + HEADER_TIMEOUT
+        while b"\r\n\r\n" not in buf:
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                raise BadRequest("Header read timeout")
+
+            try:
+                chunk = await asyncio.wait_for(reader.read(self.bufsize), timeout=remaining)
+            except asyncio.TimeoutError:
+                raise BadRequest("Header read timeout")
+
+            if chunk == b"": 
+                if buf:
+                    raise BadRequest("Malformed request headers")
+                raise asyncio.IncompleteReadError(partial=b"", expected=1)
+
+            buf += chunk
+            if len(buf) > MAX_HEADER_BYTES:
+                raise BadRequest("Header too large")
+
+        return bytes(buf)
+            
         
     def _separate_lines_and_body(self, data: bytes) -> tuple[bytes, bytes]:
         headers, _, body = data.partition(b"\r\n\r\n")
