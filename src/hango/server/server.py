@@ -2,7 +2,7 @@ import asyncio
 from hango.custom_http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response, EarlyHintsResponse, Request
 from hango.core import ContentType, MethodType, HOST
 from hango.routing import RouteToHandler
-from hango.utils import ServeFile
+from hango.utils import ServeFile, build_error_response, handle_exception
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Tuple, Any
 from hango.middleware import MiddlewareChain
@@ -86,12 +86,11 @@ class HTTPServer:
             print("Server will be closed.")
             return (None, None)
         except HTTPError as http_e:
-            print(f"HTTP Error: {http_e}")
-            # add
-            encoded_response, response = self.handle_error_response(http_e)
-        except Exception as server_e:
-            print(f'Internal Error: {server_e}')
-            encoded_response, response = self.handle_error_response(InternalServerError())
+            error_id = handle_exception(http_e, request)
+            encoded_response, response = self.handle_error_response(http_e, error_id)
+        except Exception as _:
+            error_id = handle_exception(InternalServerError, request)
+            encoded_response, response = self.handle_error_response(InternalServerError(), error_id)
             
         await self.server_respond(encoded_response, writer)
         return (request, response)
@@ -190,11 +189,13 @@ class HTTPServer:
     async def handle_request(self):
         raise NotImplementedError
 
-    def handle_error_response(self, http_error):
+    def handle_error_response(self, http_error: HTTPError, error_id: str):
+        json_body, status_code = build_error_response(request_id=error_id, status_code=http_error.status_code)
+
         response = Response(
-            body=http_error.message,
-            content_type=ContentType.PLAIN.value,
-            status_code=int(http_error.status_code)
+            body=json_body,
+            content_type=ContentType.JSON.value,
+            status_code=status_code
         )
         (encoded_response, _) = response.set_encoded_response(is_https=self._is_https)
         return encoded_response, response
