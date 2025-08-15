@@ -18,7 +18,6 @@ class ResponseHeaders:
         self.location: str = f"Location: {location}\r\n" if location else ""
         self.hsts_max_age: int = hsts_max_age
         self.hsts: str = f"Strict-Transport-Security: max-age={hsts_max_age}; includeSubDomains\r\n" if hsts else ""
-
     
     def return_response_headers(self) -> str:     
         return (
@@ -52,7 +51,7 @@ class Response:
         self.disable_default_cookie = disable_default_cookie
         self.transfer_encoding = ""
         self.redirect_to = redirect_to
-        self._is_https: bool = False
+        self._is_https: bool = is_https
 
         
     def get_headers(self, content_length):
