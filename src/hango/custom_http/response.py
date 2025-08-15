@@ -18,9 +18,9 @@ class ResponseHeaders:
         self.location: str = f"Location: {location}\r\n" if location else ""
         self.hsts_max_age: int = hsts_max_age
         self.hsts: str = f"Strict-Transport-Security: max-age={hsts_max_age}; includeSubDomains\r\n" if hsts else ""
-        self.content_type_options: str = "X-Content-Type-Options: nosniff"
-        self.referrer: str = "Referrer-Policy: no-referrer"
-        self.frame_options: str = "X-Frame-Options: DENY"
+        self.content_type_options: str = "X-Content-Type-Options: nosniff\r\n"
+        self.referrer: str = "Referrer-Policy: no-referrer\r\n"
+        self.frame_options: str = "X-Frame-Options: DENY\r\n"
     
     def return_response_headers(self) -> str:     
         return (
