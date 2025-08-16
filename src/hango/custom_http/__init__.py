@@ -12,7 +12,7 @@ from .http_error import (
 from .request import HTTPRequestParser, Request
 from .response import Response, EarlyHintsResponse, ResponseHeaders
 from .cookie import parse_cookie, set_cookie
-
+from .http_client import HttpClient
 __all__ = [
     "HTTPError",
     "BadRequest",
@@ -31,5 +31,6 @@ __all__ = [
     "EarlyHintsResponse",
     "ResponseHeaders",
     "parse_cookie",
-    "set_cookie"
+    "set_cookie",
+    "HttpClient"
 ]

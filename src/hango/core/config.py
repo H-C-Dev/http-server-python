@@ -8,3 +8,5 @@ REDIS_HOST="localhost"
 REDIS_PORT=6379
 ENABLE_HTTPS=False
 DEV=True
+CERT_FILE = "server.crt"
+KEY_FILE = "server.key"

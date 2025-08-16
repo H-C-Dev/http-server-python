@@ -1,8 +1,8 @@
 import asyncio
 from hango.custom_http import HTTPError, MethodNotAllowed, InternalServerError, BadRequest, HTTPRequestParser, Response, EarlyHintsResponse, Request
-from hango.core import ContentType, MethodType, HOST
+from hango.core import ContentType, MethodType, HOST, DEV
 from hango.routing import RouteToHandler
-from hango.utils import ServeFile, build_error_response, handle_exception
+from hango.utils import ServeFile, build_error_response, handle_exception, build_ssl_context
 from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
 from typing import Tuple, Any
 from hango.middleware import MiddlewareChain
@@ -10,14 +10,13 @@ from .connection_manager import ConnectionManager
 import signal
 import ssl
 
+
 ENABLE_HTTPS = False
 PORT=8080
 HTTPS_PORT = 8443
 CERT_FILE = "server.crt"
 KEY_FILE = "server.key"
 HEADER_SIZE=65536
-
-
 
 class HTTPServer:
     def __init__(self, host, port, container, backlog=5):
@@ -27,15 +26,6 @@ class HTTPServer:
         self.container = container
         self._shutting_down = False
         self._is_https = False
-
-    def _build_ssl_context(self) -> ssl.SSLContext:
-        if CERT_FILE and KEY_FILE:
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.load_cert_chain(certfile=CERT_FILE, keyfile=KEY_FILE)
-            return context
-        
-        else:
-            raise FileNotFoundError("SSL CERT or KEY FILE is not found. Or disable HTTPS to continue.")
 
     async def _register_connection_manager(self, writer: asyncio.StreamWriter) -> Tuple[int, ConnectionManager]:
         connection_manager = None
@@ -166,7 +156,7 @@ class HTTPServer:
     async def init_server(self):
         https_server = None
         if ENABLE_HTTPS == True:
-            ssl_context = self._build_ssl_context()
+            ssl_context = build_ssl_context(is_server=True)
             https_server = await asyncio.start_server(
                 client_connected_cb=self._handle_client, 
                 host=self.host, 
