@@ -17,12 +17,13 @@ def start_request(request: Request):
 def slow_request(request: Request):
     log("[SLOW REQUEST]", request_id=request.request_id)
 
-def end_request(response: Response, request: Request):
-    log("[RETURNING RESPONSE]", request_id=request.request_id, status_code=getattr(response, "status_code", ""), body=getattr(response, "body", ""), cors_header=getattr(response, "cors_header", "")) 
+def end_request(response: Response, request: Request, SLOW_THRESHOLD: float):
+    response.response_id = request.request_id
+    log("[RETURNING RESPONSE]", response_id=response.response_id, status_code=getattr(response, "status_code", ""), body=getattr(response, "body", ""), cors_header=getattr(response, "cors_header", "")) 
     duration = time.monotonic() - request.start_time
-    print('DURATION', duration)
+    response.duration = duration
     if duration > SLOW_THRESHOLD:
         slow_request(request=request)
 
-def end_error_request(response: Response): 
-    log("[RETURNING ERROR RESPONSE]", request_id=request_id(), status_code=getattr(response, "status_code", ""), body=getattr(response, "body", ""), cors_header=getattr(response, "cors_header", ""))
+def end_error_request(response: Response, e: Exception): 
+    log("[RETURNING ERROR RESPONSE]", request_id=request_id(), status_code=getattr(response, "status_code", ""), body=getattr(response, "body", ""), cors_header=getattr(response, "cors_header", ""), error=str(e))
