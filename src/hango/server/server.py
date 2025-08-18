@@ -8,8 +8,8 @@ from typing import Tuple, Any
 from hango.middleware import MiddlewareChain
 from .connection_manager import ConnectionManager
 import signal
-import ssl
 
+from hango.obs import start_request, end_request, end_error_request
 
 ENABLE_HTTPS = False
 PORT=8080
@@ -61,27 +61,29 @@ class HTTPServer:
         is_https_for_hsts = is_tls and not DEV
         self._is_https = is_https_for_hsts
 
-    
+
     async def _process_request(self, reader, writer) -> tuple[Request | None, Response | None]:
         request = None
         try:
             (request, handler, is_static_prefix, local_middlewares, cache_middlewares, redirect) = \
                 await self.parse_request(reader, writer)
+            start_request(request)
             if redirect:
                 encoded_response, response = await self._handle_redirect(request)
             else:
                 encoded_response, response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
-
+            end_request(response, request)
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
             print("Server will be closed.")
             return (None, None)
         except HTTPError as http_e:
             error_id = handle_exception(http_e, request)
             encoded_response, response = self.handle_error_response(http_e, error_id)
+            end_error_request(response)
         except Exception as _:
             error_id = handle_exception(InternalServerError, request)
             encoded_response, response = self.handle_error_response(InternalServerError(), error_id)
-            
+            end_error_request(response) 
         await self.server_respond(encoded_response, writer)
         return (request, response)
         
@@ -276,7 +278,7 @@ class Server(HTTPServer):
         return (encoded_response, response)
     
 
-    async def _handle_static_request(self, path, writer, is_early_hints_supported):
+    async def _handle_static_request(self, path, writer, is_early_hints_supported) -> Response:
             (file_bytes, content_type, hints) = self.container.get(ServeFile).serve_static_file(path)
             if len(hints) > 0 and is_early_hints_supported:
                 await self._handle_early_hints_response(writer, hints)
