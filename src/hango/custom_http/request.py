@@ -131,6 +131,8 @@ class Request:
     is_localhost: bool = False
     session: LazySession | None = None
     body_fully_read: bool = False
+    start_time: float | None = None
+    request_id: str | None = None
 
 
 class HTTPRequestParser:
