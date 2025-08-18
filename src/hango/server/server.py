@@ -8,6 +8,7 @@ from typing import Tuple, Any
 from hango.middleware import MiddlewareChain
 from .connection_manager import ConnectionManager
 import signal
+from hango.obs import snapshot
 
 from hango.obs import start_request, end_request, end_error_request
 
@@ -67,23 +68,21 @@ class HTTPServer:
         try:
             (request, handler, is_static_prefix, local_middlewares, cache_middlewares, redirect) = \
                 await self.parse_request(reader, writer)
-            start_request(request)
             if redirect:
                 encoded_response, response = await self._handle_redirect(request)
             else:
                 encoded_response, response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
-            end_request(response, request)
         except (asyncio.IncompleteReadError, ConnectionResetError, BrokenPipeError):
             print("Server will be closed.")
             return (None, None)
         except HTTPError as http_e:
             error_id = handle_exception(http_e, request)
             encoded_response, response = self.handle_error_response(http_e, error_id)
-            end_error_request(response)
-        except Exception as _:
+            end_error_request(response, http_e)
+        except Exception as e:
             error_id = handle_exception(InternalServerError, request)
             encoded_response, response = self.handle_error_response(InternalServerError(), error_id)
-            end_error_request(response) 
+            end_error_request(response, e) 
         await self.server_respond(encoded_response, writer)
         return (request, response)
         
@@ -299,9 +298,23 @@ class Server(HTTPServer):
             self.container.get(RouteToHandler).add_route(template, func, MethodType.POST.value, local_middlewares)
             return func
         return decorator
+    
+    def _register_default_route(self):
+        @self.GET("/healthz")
+        async def healthz(_req: Request) -> Response:
+            return Response(status_code=200, body={"ok": True})
+
+        @self.GET("/readyz")
+        async def readyz(_req: Request) -> Response:
+            return Response(status_code=200, body={"ready": "ok", "details": "Server is ready"})
+
+        @self.GET("/metricsz")
+        async def metricsz(_req: Request) -> Response:
+            return Response(status_code=200, body={"metrics": snapshot()})
 
     def start_server(self):
         async def main():
+            self._register_default_route()
             (https_server, http_server) = await self.init_server()
             http_msg = f"HTTP listening on {self.host}:{PORT}"
             https_msg = f"; HTTPS on {self.host}:{HTTPS_PORT}" if https_server else ""
