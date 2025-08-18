@@ -4,6 +4,7 @@ from hango.custom_http import HTTPError, InternalServerError
 from hango.core import http_status_codes_message
 import json
 import datetime
+from .request_id import request_id
 
 
 if TYPE_CHECKING:
@@ -33,8 +34,6 @@ def redact(value: any):
         return value[:MAX_LOG_FIELD_LEN] + "…"
     return value
 
-def new_request_id() -> str:
-    return str(uuid.uuid4())
 
 def snapshot_request(request: Optional["Request"] = None) -> dict:
     try:
@@ -78,7 +77,7 @@ def build_error_response(request_id: str, status_code: str):
 
 
 def handle_exception(exception: HTTPError | InternalServerError, request: Optional["Request"] = None) -> str:
-    error_id = new_request_id()
+    error_id = request_id()
     request_snapshot = snapshot_request(request) if request else {}
     log_exception(error_id, exception, request_snapshot)
     return error_id

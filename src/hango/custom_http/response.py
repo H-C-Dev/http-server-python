@@ -58,6 +58,8 @@ class Response:
         self.transfer_encoding = ""
         self.redirect_to = redirect_to
         self._is_https: bool = is_https
+        self.response_id: str | None = None
+        self.duration: float | None = None
 
         
     def get_headers(self, content_length):

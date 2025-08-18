@@ -70,6 +70,7 @@ class HttpClient:
                                                                                                            )
                 if 200 <= status < 300:
                     self._log_ok(method, url, status, headers, len(response_body), request_id)
+                    return status, response_headers, response_body
 
                 if idempotent and status in (429, 502, 503, 504) and attempt <= self.max_retries + 1:
                     self._log_retry(method, url, status, attempt, request_id)
