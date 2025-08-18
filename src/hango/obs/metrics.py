@@ -10,11 +10,11 @@ def observe_latency(method: str, route: str, ms: int):
     placed = False
     for b in BUCKETS_MS:
         if ms <= b:
-            counters[("request_duration_ms_bucket", method, route, f"le_{b}")] += 1
+            counters[("request_duration_ms_bucket", method, route, f"less than {b}")] += 1
             placed = True
             break
     if not placed:
-        counters[("request_duration_ms_bucket", method, route, "gt_10000")] += 1
+        counters[("request_duration_ms_bucket", method, route, f"greater than {BUCKETS_MS[-1]}")] += 1
 
 def snapshot():
     return {"/".join(k): v for k, v in counters.items()}
