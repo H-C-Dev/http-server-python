@@ -5,6 +5,8 @@ CORS=['*']
 http_status_codes_message = {
     "103": "Early Hints",
     "200": "OK", 
+    "204": "No Content",
+    "308": "Permanent Redirect",
     "400": "Bad Request", 
     "403": "Forbidden",
     "500": "Internal Server Error",
