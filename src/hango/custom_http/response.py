@@ -5,7 +5,7 @@ from hango.utils import response_time
 from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
-    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None, hsts: bool = False, hsts_max_age: int = 31536000):
+    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None, hsts: bool = False, hsts_max_age: int = 31536000, is_options: bool = False):
         self.start_line: str = f"HTTP/1.1 {status_code} {status_message}\r\n"
         self.date: str = f"Date: {date}\r\n"
         self.server: str = f"Server: {server}\r\n"
@@ -13,6 +13,8 @@ class ResponseHeaders:
         self.content_length: str = (f"Content-Length: {content_length}\r\n" if content_length else "Content-Length: 0\r\n")
         self.connection: str = f"Connection: {connection}\r\n" if connection else f"Connection: keep-alive\r\n"
         self.cors_header: str = f"Access-Control-Allow-Origin: {cors_header}\r\n" if cors_header else ""
+        self.cors_header_ct: str = "Access-Control-Allow-Headers: Content-Type\r\n" if is_options == True else ""
+        self.cors_method_header: str = f"Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" if is_options == True else ""
         self.set_cookie: str = f"Set-Cookie: {set_cookie}\r\n" if set_cookie else ""
         self.transfer_encoding: str = ""
         self.location: str = f"Location: {location}\r\n" if location else ""
@@ -31,6 +33,8 @@ class ResponseHeaders:
             self.content_length  +
             self.connection + 
             self.cors_header +
+            self.cors_header_ct +
+            self.cors_method_header +
             self.set_cookie +
             self.location +
             self.hsts +
@@ -60,6 +64,7 @@ class Response:
         self._is_https: bool = is_https
         self.response_id: str | None = None
         self.duration: float | None = None
+        self.is_options: bool = False
 
         
     def get_headers(self, content_length):
@@ -74,7 +79,8 @@ class Response:
             set_cookie= self.set_cookie if self.set_cookie else None,
             location=self.redirect_to,
             connection="close" if self.redirect_to else None,
-            hsts=self._is_https
+            hsts=self._is_https,
+            is_options=self.is_options
 
         )
         return headers
