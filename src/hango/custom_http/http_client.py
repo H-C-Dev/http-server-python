@@ -59,18 +59,10 @@ class HttpClient:
         while True:
             attempt += 1
             try:
-                status, response_headers, response_body = await asyncio.get_running_loop().run_in_executor(None,
-                                                                                                           partial(self._do_request_blocking,
-                                                                                                                   method=method,
-                                                                                                                   url=url,
-                                                                                                                   headers=headers,
-                                                                                                                   body=body_bytes,
-                                                                                                                   timeout_s=timeout_s,
-    ),
-                                                                                                           )
+                status, response_headers, response_body = await asyncio.get_running_loop().run_in_executor(None, partial(self._do_request_blocking, method=method, url=url, headers=headers, body=body_bytes, timeout_s=timeout_s))
                 if 200 <= status < 300:
                     self._log_ok(method, url, status, headers, len(response_body), request_id)
-                    return status, response_headers, response_body
+                    return status, response_headers, response_body.decode()
 
                 if idempotent and status in (429, 502, 503, 504) and attempt <= self.max_retries + 1:
                     self._log_retry(method, url, status, attempt, request_id)
