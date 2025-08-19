@@ -66,8 +66,8 @@ def cache_middleware(handler, cache):
         return response
     return wrapped
 
-balance_rt = make_rate_limit_middleware(RateLimiter(max_requests_number=1, period=10))
-@server.GET("/balance", cache_middlewares=[cache_middleware], local_middlewares=[balance_rt])
+balance_rl = make_rate_limit_middleware(RateLimiter(max_requests_number=1, period=10))
+@server.GET("/balance", cache_middlewares=[cache_middleware], local_middlewares=[balance_rl])
 async def get_balance(request: Request) -> Response:
     account_id = await get_account_id(request_id=request.request_id)
     balance = await get_balance_starling(account_id=account_id, request_id=request.request_id)
