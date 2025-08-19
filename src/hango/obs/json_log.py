@@ -1,6 +1,6 @@
 import json, sys, time
 from hango.utils import redact, milliseconds, request_id
-from hango.custom_http import Request, Response
+
 SLOW_THRESHOLD = 0.0
 
 
@@ -18,15 +18,22 @@ def log(event: str, **fields):
     sys.stdout.write(json.dumps(record, separators=(",", ":"), default=_json_dumps_safe) + "\n")
     sys.stdout.flush()
 
-def start_request(request: Request):
+def start_request(request):
+    from hango.custom_http import Request
+    assert isinstance(request, Request)
     log("[INCOMING REQUEST]", request_id=request_id(), method=getattr(request, "method", ""), path=getattr(request, "path", ""), version=getattr(request, "version", ""))
     request.start_time = time.monotonic()
     request.request_id = request_id()
 
-def slow_request(request: Request):
+def slow_request(request):
+    from hango.custom_http import Request
+    assert isinstance(request, Request)
     log("[SLOW REQUEST]", request_id=request.request_id)
 
-def end_request(response: Response, request: Request, SLOW_THRESHOLD: float):
+def end_request(response, request, SLOW_THRESHOLD: float):
+    from hango.custom_http import Request, Response
+    assert isinstance(request, Request)
+    assert isinstance(response, Response)
     response.response_id = request.request_id
     log("[RETURNING RESPONSE]", response_id=response.response_id, status_code=getattr(response, "status_code", ""), body=getattr(response, "body", ""), cors_header=getattr(response, "cors_header", "")) 
     duration = time.monotonic() - request.start_time
@@ -34,5 +41,7 @@ def end_request(response: Response, request: Request, SLOW_THRESHOLD: float):
     if duration > SLOW_THRESHOLD:
         slow_request(request=request)
 
-def end_error_request(response: Response, e: Exception): 
+def end_error_request(response, e: Exception): 
+    from hango.custom_http import Response
+    assert isinstance(response, Response)
     log("[RETURNING ERROR RESPONSE]", request_id=request_id(), status_code=getattr(response, "status_code", ""), body=getattr(response, "body", ""), cors_header=getattr(response, "cors_header", ""), error=str(e))

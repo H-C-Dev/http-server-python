@@ -1,10 +1,11 @@
-from hango.custom_http import Request, Response, set_cookie
+# from hango.custom_http import Request, Response, set_cookie
 from hango.session import SessionStore, LazySession
 from hango.utils import is_coroutine  
 
 
 
 def make_session_middleware(session_store: SessionStore):
+    from hango.custom_http import Request, Response, set_cookie
     def session_middleware(handler: callable):
         async def wrapped(request: Request) -> Response:
             cookies = request.headers.cookie or {}

@@ -1,4 +1,7 @@
-from hango.custom_http import Response, Request
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  
+    from hango.custom_http import Response
 import json
 from hango.utils import is_coroutine
 
@@ -54,7 +57,7 @@ class CacheHelper:
 
 
     
-    async def handle_cache(self, request: Request, handler, TTL: int):
+    async def handle_cache(self, request, handler, TTL: int):
         cache_key = self._set_cache_key(request.query, request.path, request.method)
 
         if cache_key == None:

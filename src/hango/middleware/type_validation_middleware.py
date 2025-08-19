@@ -1,11 +1,11 @@
-from hango.custom_http import Response, Request
+
 
 class Validator:
     def __init__(self, schema: dict[str, type], source="query"):
         self.schema = schema
         self.source = source
 
-    def validate(self, request: Request) -> tuple[bool, dict]:
+    def validate(self, request) -> tuple[bool, dict]:
         data = getattr(request, self.source, {}) or {}
 
         extra_fields = set(data.keys()) - set(self.schema.keys())
@@ -34,6 +34,7 @@ class Validator:
         return True, dict(data)
 
 def make_validate_middleware(validators: list[Validator]):
+    from hango.custom_http import Response, Request
     def validate_middleware(handler):
         async def wrapped(request):
             for validator in validators:
