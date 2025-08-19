@@ -1,8 +1,6 @@
 import json, sys, time
 from hango.utils import redact, milliseconds, request_id
 
-SLOW_THRESHOLD = 0.0
-
 
 def _json_dumps_safe(obj):
     if isinstance(obj, (set, frozenset)):
@@ -38,7 +36,11 @@ def end_request(response, request, SLOW_THRESHOLD: float):
     log("[RETURNING RESPONSE]", response_id=response.response_id, status_code=getattr(response, "status_code", ""), body=getattr(response, "body", ""), cors_header=getattr(response, "cors_header", "")) 
     duration = time.monotonic() - request.start_time
     response.duration = duration
-    if duration > SLOW_THRESHOLD:
+    print("DUR",duration)
+    print(type(duration))
+    print(duration > SLOW_THRESHOLD)
+    print(SLOW_THRESHOLD)
+    if float(duration) > float(SLOW_THRESHOLD):
         slow_request(request=request)
 
 def end_error_request(response, e: Exception): 
