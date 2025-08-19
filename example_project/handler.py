@@ -1,0 +1,81 @@
+import json
+from .server import server
+from hango.custom_http import Response, Request, HttpClient, NotFound, BadRequest, InternalServerError
+import os
+from .sns import send_email
+from hango.utils import env_loader
+env_loader()
+from .db import get_schedules, add_schedule
+
+import time
+from hango.obs import log
+
+
+
+STARLING_PAT = os.environ["STARLING_PAT"]
+STARLING_PAT = f"Bearer {STARLING_PAT}"
+GET_ACC_ID_API = "https://api.starlingbank.com/api/v2/accounts"
+GET_ACC_BALANCE =  lambda account_id: f"https://api.starlingbank.com/api/v2/accounts/{account_id}/balance"
+
+async def get_account_id(request_id: str | None = None) -> str:
+    _, _, body = await client.request("GET", GET_ACC_ID_API, authorization=STARLING_PAT,request_id=request_id)
+    body = json.loads(body)
+    if not body['accounts'][0]['accountUid']:
+        raise NotFound("Account Not Found")
+    
+    account_id = body['accounts'][0]['accountUid']
+
+    return account_id
+
+
+async def get_balance_starling(account_id: str, request_id: str | None = None):
+    _, _, body = await client.request("GET", GET_ACC_BALANCE(account_id=account_id), authorization=STARLING_PAT,request_id=request_id)
+
+    body = json.loads(body)
+    if body['effectiveBalance']['minorUnits'] == None:
+        raise NotFound("Balance Not Found")
+
+    balance = body['effectiveBalance']['minorUnits']
+    return f'£{balance}'
+
+async def send_balance_email():
+    try:
+        print("sending email")
+        now = time.monotonic()
+        account_id = await get_account_id(f'Server-Schdule-request {now}')
+        balance = await get_balance_starling(account_id, now)
+        response = send_email(balance)
+        log("Email Sent", status=response)
+    except Exception as e:
+        log("Email Failed", error=str(e))
+        raise
+
+
+
+@server.GET("/test")
+def test(request: Request) -> Response:
+    return Response(body="Test", status_code="200")
+
+client = HttpClient(user_agent="test")
+
+@server.GET("/balance")
+async def get_balance(request: Request) -> Response:
+    
+    account_id = await get_account_id(request_id=request.request_id)
+    balance = await get_balance_starling(account_id=account_id, request_id=request.request_id)
+
+    return Response(status_code="200", body=balance)
+
+
+@server.GET("/schedule")
+async def get_schedule(request: Request) -> Response:
+    schedules = get_schedules()[0]
+
+    return Response(status_code="200", body=str(schedules[2]))
+
+@server.POST("/modify")
+async def modify_schedule(request: Request) -> Response:
+    val = request.body["schedule"]
+    add_schedule("daily_balance", val)
+    schedules = get_schedules()[0]
+    return Response(status_code="200", body=str(schedules[2]))
