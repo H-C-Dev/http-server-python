@@ -10,3 +10,4 @@ ENABLE_HTTPS=False
 DEV=True
 CERT_FILE = "server.crt"
 KEY_FILE = "server.key"
+SLOW_THRESHOLD = 0.001

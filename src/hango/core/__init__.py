@@ -1,4 +1,4 @@
-from .config import SERVER_ROOT, STATIC_ROOT, PORT, HOST, REDIS_HOST, REDIS_PORT, ENABLE_HTTPS, DEV, CERT_FILE, KEY_FILE
+from .config import SERVER_ROOT, STATIC_ROOT, PORT, HOST, REDIS_HOST, REDIS_PORT, ENABLE_HTTPS, DEV, CERT_FILE, KEY_FILE, SLOW_THRESHOLD
 from .constants import CORS, http_status_codes_message, MethodType, ContentType, EarlyHintsClient, EXTENSION_TO_MIME, allowed_content_type
 from .type_safe import type_safe
 from .container import ServiceContainer
@@ -22,5 +22,6 @@ __all__ = [
     "ENABLE_HTTPS",
     "DEV",
     "CERT_FILE",
-    "KEY_FILE"
+    "KEY_FILE",
+    "SLOW_THRESHOLD"
 ]
