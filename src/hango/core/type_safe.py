@@ -2,7 +2,10 @@ import inspect
 import typing
 from functools import wraps
 import asyncio
+from hango.core import DEV
 def type_safe(func):
+    if DEV == False:
+        return func
     # strips the metadata from func typw annotations, and put them in a dict/map
     types_map = typing.get_type_hints(func)
     # returns Signature object that contains the provides the structure for matching actual call args to those annotated args
