@@ -1,24 +1,22 @@
-from hango.core import CORS
+
 from hango.custom_http import Forbidden
 import asyncio
+from hango.utils import is_cors_allowed
 
 def cors_middleware(handler):
     async def wrapped(request):
         user_agent = request.headers.user_agent.lower()
-        host = request.headers.host
+        origin = request.headers.origin
         is_localhost = request.is_localhost
         cors_header = None
-        if 'mozilla' in user_agent or 'chrome' in user_agent or 'safari' in user_agent: 
-            if is_localhost:
+        
+        if is_localhost and 'mozilla' not in user_agent or 'chrome' not in user_agent or 'safari' not in user_agent:
                 pass
-            elif '*' in CORS:
-                cors_header = "*"
-            elif 'http://' + host in CORS: 
-                cors_header = 'http://' + host
-            elif 'https://' + host in CORS:
-                cors_header = 'https://' + host
+        elif 'mozilla' in user_agent or 'chrome' in user_agent or 'safari' in user_agent: 
+            if is_cors_allowed(origin) != None:
+                cors_header = is_cors_allowed(origin)
             else:
-                raise Forbidden(message=f"Host {host} is not allowed to access this resource. CORS policy is validated.")
+                raise Forbidden(message=f"Host {origin} is not allowed to access this resource. CORS policy is validated.")
         response = handler(request)
         if asyncio.iscoroutine(response):
              response = await response
