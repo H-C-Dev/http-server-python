@@ -4,7 +4,7 @@ from .obs_middleware import make_obervabilty_middleware
 from .session_middleware import make_session_middleware
 from hango.session import SessionStore
 
-DEFAULT_MIDDLEWARES = [cors_middleware, make_obervabilty_middleware]
+DEFAULT_MIDDLEWARES = [cors_middleware, make_obervabilty_middleware()]
 
 class MiddlewareChain:
     def __init__(self, session_store: SessionStore=None):
