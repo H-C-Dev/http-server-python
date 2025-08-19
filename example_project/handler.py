@@ -6,7 +6,7 @@ from .sns import send_email
 from hango.utils import env_loader
 env_loader()
 from .db import get_schedules, add_schedule
-
+import asyncio
 import time
 from hango.obs import log
 
@@ -79,3 +79,16 @@ async def modify_schedule(request: Request) -> Response:
     add_schedule("daily_balance", val)
     schedules = get_schedules()[0]
     return Response(status_code="200", body=str(schedules[2]))
+
+@server.set_global_middlewares
+def foo_middleware(handler):
+    async def wrapped(request):
+        print("[Middleware] mw says hello to handler for:", request)
+        response: Response = handler(request)
+        if asyncio.iscoroutine(response):
+             response = await response
+        response.set_headers()
+        print(response.headers.return_response_headers())
+        print("[Middleware] mw says bye to handler response:", response)
+        return response
+    return wrapped
