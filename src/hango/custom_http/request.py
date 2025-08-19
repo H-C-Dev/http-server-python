@@ -11,7 +11,7 @@ from .cookie import parse_cookie
 from hango.session import LazySession
 import json
 BODY_SIZE = 10 * 1024 * 1024
-
+from hango.middleware import is_cors_allowed
 
 @dataclass
 class RequestHeaders:
@@ -25,6 +25,7 @@ class RequestHeaders:
     cookie: dict[str, str] = field(default_factory=dict)
     cookie_part: list[str] = field(default_factory=list)
     transfer_encoding: str | None = None
+    origin: str | None = None
 
     def set_content_type(self, content_type: str):
         raw = (content_type or "").strip()
@@ -41,6 +42,11 @@ class RequestHeaders:
         if not is_allowed:
             raise BadRequest(f"Content-Type not allowed: {content_type}")
         self.content_type = main_content_type
+
+
+
+    def set_origin(self, origin: str):
+        self.origin = origin
 
     def set_user_agent(self, user_agent: str):
         self.user_agent = user_agent
@@ -122,7 +128,7 @@ class Request:
     path: str
     version: str
     query: dict
-    query_validated: dict
+    query_validated: dict | None
     body: dict | str | None
     body_validated: dict
     headers: RequestHeaders
@@ -234,6 +240,7 @@ class HTTPRequestParser:
             "content-length": headers.set_content_length,
             "cookie": headers.set_cookie_part,
             "transfer-encoding": headers.set_transfer_encoding,
+            "origin": headers.set_origin
         }
         for line in lines[1:]:
             if not line:
@@ -297,7 +304,11 @@ class HTTPRequestParser:
 
         body, lines = await self._extract_request_lines_and_body(reader)
         method, path, version = self._extract_request_line(lines)
+            
         headers = self._parse_headers(lines)
+        if method == "OPTIONS" and is_cors_allowed(headers.origin):
+            request = Request(method=method, path=path, version=version, query={}, body={}, headers=headers, query_validated={}, body_validated={}, is_early_hints_supported=False)
+            return (request, None, False, None, None, True)
 
         if not is_https and not is_localhost:
             request = Request(method, path, version, {}, {}, None, {}, headers, False, params=None, is_localhost=is_localhost, body_fully_read=False)
