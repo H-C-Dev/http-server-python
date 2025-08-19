@@ -24,6 +24,7 @@ class CacheHelper:
         return None
 
     def _handle_cache_hitted(self, raw):
+        from hango.custom_http import Response
         print('cache hitted')
         payload = json.loads(raw)
         response = Response(                
