@@ -11,7 +11,7 @@ import time
 from hango.obs import log
 from hango.middleware import make_validate_middleware, Validator
 from hango.middleware import  CacheHelper, make_rate_limit_middleware, RateLimiter
-
+from hango.core import type_safe
 
 STARLING_PAT = os.environ["STARLING_PAT"]
 STARLING_PAT = f"Bearer {STARLING_PAT}"
@@ -28,8 +28,8 @@ async def get_account_id(request_id: str | None = None) -> str:
 
     return account_id
 
-
-async def get_balance_starling(account_id: str, request_id: str | None = None):
+@type_safe
+async def get_balance_starling(account_id: str, request_id: str | None = None) -> str:
     _, _, body = await client.request("GET", GET_ACC_BALANCE(account_id=account_id), authorization=STARLING_PAT,request_id=request_id)
 
     body = json.loads(body)
