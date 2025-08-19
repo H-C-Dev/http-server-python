@@ -229,21 +229,19 @@ class Server(HTTPServer):
     async def _invoke_handler(self, handler, request, local_middlewares, cache_middlewares) -> Response:
         cache = self.container.get('cache')
         wrapped = self.container.get(MiddlewareChain).wrap_handler(handler, local_middlewares, request, cache_middlewares, cache)
-        try:
-            if asyncio.iscoroutinefunction(wrapped):
-                response = await wrapped(request)
+
+        if asyncio.iscoroutinefunction(wrapped):
+            response = await wrapped(request)
+            return response
+        else:
+            if self._executor:
+                loop = asyncio.get_running_loop()
+                response = await loop.run_in_executor(self._executor, wrapped, request)
                 return response
             else:
-                if self._executor:
-                    loop = asyncio.get_running_loop()
-                    response = await loop.run_in_executor(self._executor, wrapped, request)
-                    return response
-                else:
-                    response = wrapped(request)
-                    return response
-        except Exception as e:
-            print(f"Error: {e}")
-            raise BadRequest(f"{request.body}")
+                response = wrapped(request)
+                return response
+
 
 
     async def parse_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> HTTPRequestParser:
@@ -259,8 +257,6 @@ class Server(HTTPServer):
         await super().server_respond(encoded_response, writer, is_early_hints=True)
     
     async def handle_request(self, request, handler, writer, is_static_prefix, local_middlewares=[], cache_middlewares=[]) -> tuple[bytes, Response]:
-        # run the global hook before handler
-
         (method, path, is_early_hints_supported) = self._extract_method_path(request)
 
         if method == MethodType.GET.value and is_static_prefix:
@@ -312,62 +308,64 @@ class Server(HTTPServer):
         async def metricsz(_req: Request) -> Response:
             return Response(status_code=200, body={"metrics": snapshot()})
 
+    async def _serve(self):
+        self._register_default_route()
+        (https_server, http_server) = await self.init_server()
+        http_msg = f"HTTP listening on {self.host}:{PORT}"
+        https_msg = f"; HTTPS on {self.host}:{HTTPS_PORT}" if https_server else ""
+        print(f"Server is up and running. {http_msg}{https_msg}")
+
+        loop = asyncio.get_running_loop()
+        stop = asyncio.Event()
+
+        def _shutdown():
+            print("\nShutting down...")
+            self._shutting_down = True
+            try:
+                if http_server:
+                    http_server.close()
+                if https_server:
+                    https_server.close()
+            finally:
+                try:
+                    stop.set()
+                except Exception:
+                    pass
+
+        try:
+            loop.add_signal_handler(signal.SIGINT, _shutdown)
+            loop.add_signal_handler(signal.SIGTERM, _shutdown)
+        except NotImplementedError:
+            pass
+
+        await stop.wait()
+
+        try:
+            connection_manager = self.container.get(ConnectionManager)
+        except Exception:
+            connection_manager = None
+        if connection_manager and hasattr(connection_manager, "close_all"):
+            try:
+                await connection_manager.close_all()
+            except Exception as e:
+                print(f"Error closing active connections: {e}")
+
+        exec_ = getattr(self, "_executor", None)
+        if exec_ is not None:
+            try:
+                exec_.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                exec_.shutdown(wait=False)
+
+        if http_server:
+            await http_server.wait_closed()
+        if https_server:
+            await https_server.wait_closed()
+
+        print("The server has been closed.")
+
     def start_server(self):
-        async def main():
-            self._register_default_route()
-            (https_server, http_server) = await self.init_server()
-            http_msg = f"HTTP listening on {self.host}:{PORT}"
-            https_msg = f"; HTTPS on {self.host}:{HTTPS_PORT}" if https_server else ""
-            print(f"Server is up and running. {http_msg}{https_msg}")
+        asyncio.run(self._serve())
 
-            loop = asyncio.get_running_loop()
-            stop = asyncio.Event() 
-
-            def _shutdown():
-                print("\nShutting down...")
-                self._shutting_down = True
-                try:
-                    if http_server:
-                        http_server.close()     
-                    if https_server:
-                        https_server.close()
-                finally:
-                    try:
-                        stop.set()
-                    except Exception:
-                        pass
-
-            try:
-                loop.add_signal_handler(signal.SIGINT, _shutdown)
-                loop.add_signal_handler(signal.SIGTERM, _shutdown)
-            except NotImplementedError:
-                pass
-
-            await stop.wait()
-
-            try:
-                connection_manager = self.container.get(ConnectionManager)
-            except Exception:
-                connection_manager = None
-            if connection_manager and hasattr(connection_manager, "close_all"):
-                try:
-                    await connection_manager.close_all()
-                except Exception as e:
-                    print(f"Error closing active connections: {e}")
-
-            exec_ = getattr(self, "_executor", None)
-            if exec_ is not None:
-                try:
-                    exec_.shutdown(wait=False, cancel_futures=True)
-                except TypeError:
-                    exec_.shutdown(wait=False)
-
-
-            if http_server:
-                await http_server.wait_closed()
-            if https_server:
-                await https_server.wait_closed()
-
-            print("The server has been closed.")
-
-        asyncio.run(main())
+    async def start_server_async(self):
+        await self._serve()
