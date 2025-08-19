@@ -99,3 +99,12 @@ def foo_middleware(handler):
         print("[Middleware] mw says bye to handler response:", response)
         return response
     return wrapped
+
+
+@server.set_hook_after_each_handler
+def log_response(request, response):
+    print('[HOOK RESPONSE]:',response)
+
+@server.set_hook_before_each_handler
+def log_request(request):
+    print('[HOOK REQUEST]', request)
