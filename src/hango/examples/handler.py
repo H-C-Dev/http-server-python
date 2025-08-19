@@ -5,6 +5,7 @@ from hango.example_entry_point import server
 from hango.middleware import  CacheHelper
 from hango.utils import is_coroutine
 from hango.middleware import make_rate_limit_middleware, RateLimiter, make_validate_middleware, Validator
+from hango.obs import log
 
 
 @server.set_global_middlewares
@@ -90,6 +91,8 @@ def return_client_data(request) -> Response:
         source="body")])])
 @type_safe
 def post_endpoint(request) -> Response:
+    log("Client's data", body = request.body)
+
     print("[Data received from client]:", request.body)
     print(type(request.body))
     return Response(body="hello world from post endpoint", status_code="200")
