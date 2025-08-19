@@ -45,9 +45,9 @@ class ResponseHeaders:
 class Response:
     def __init__(self, status_code: int | str, content_type: str | None = None, body: str | None = None, disable_default_cookie: bool = False, redirect_to: str | None = None, is_https: bool = False):
         self.encoding = 'utf-8'
-        self.status_code: Union[int, str] = status_code
+        self.status_code: int | str = status_code
         self.headers: ResponseHeaders | None = None
-        self.body: Optional[str] = json.dumps(body) if isinstance(body, (dict, list)) else body 
+        self.body: str | None = json.dumps(body) if isinstance(body, (dict, list)) else body 
         self.content_type = (content_type if content_type
                              else ContentType.JSON.value if isinstance(body, (dict, list))
                              else ContentType.PLAIN.value if body == None
