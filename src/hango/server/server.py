@@ -62,13 +62,22 @@ class HTTPServer:
         is_https_for_hsts = is_tls and not DEV
         self._is_https = is_https_for_hsts
 
+    def _handle_options_response(self, origin):
+        response: Response = Response(status_code="204")
+        response.cors_header = origin
+        response.is_options = True
+        (encoded_response, response) = response.set_encoded_response(is_https=self._is_https)
+        print(response)
+        return encoded_response, response
 
     async def _process_request(self, reader, writer) -> tuple[Request | None, Response | None]:
         request = None
         try:
             (request, handler, is_static_prefix, local_middlewares, cache_middlewares, redirect) = \
                 await self.parse_request(reader, writer)
-            if redirect:
+            if request.method == 'OPTIONS':
+                encoded_response, response = self._handle_options_response(request.headers.origin)
+            elif redirect:
                 encoded_response, response = await self._handle_redirect(request)
             else:
                 encoded_response, response = await self.handle_request(request, handler, writer, is_static_prefix, local_middlewares, cache_middlewares)
