@@ -31,7 +31,7 @@ def local_middleware(handler):
 def cache_middleware(handler, cache):
     async def wrapped(request):
         cache_helper = CacheHelper(cache)
-        response = await cache_helper.handle_cache(request, handler, 3600)
+        response = await cache_helper.handle_cache(request, handler, 10)
         return response
     return wrapped
         

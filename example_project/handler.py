@@ -9,7 +9,8 @@ from .db import get_schedules, add_schedule
 import asyncio
 import time
 from hango.obs import log
-
+from hango.middleware import make_validate_middleware, Validator
+from hango.middleware import  CacheHelper, make_rate_limit_middleware, RateLimiter
 
 
 STARLING_PAT = os.environ["STARLING_PAT"]
@@ -58,22 +59,28 @@ def test(request: Request) -> Response:
 
 client = HttpClient(user_agent="test")
 
-@server.GET("/balance")
+def cache_middleware(handler, cache):
+    async def wrapped(request):
+        cache_helper = CacheHelper(cache)
+        response = await cache_helper.handle_cache(request, handler, 10)
+        return response
+    return wrapped
+
+balance_rt = make_rate_limit_middleware(RateLimiter(max_requests_number=1, period=10))
+@server.GET("/balance", cache_middlewares=[cache_middleware], local_middlewares=[balance_rt])
 async def get_balance(request: Request) -> Response:
-    
     account_id = await get_account_id(request_id=request.request_id)
     balance = await get_balance_starling(account_id=account_id, request_id=request.request_id)
-
     return Response(status_code="200", body=balance)
-
 
 @server.GET("/schedule")
 async def get_schedule(request: Request) -> Response:
     schedules = get_schedules()[0]
-
     return Response(status_code="200", body=str(schedules[2]))
 
-@server.POST("/modify")
+modify_tv = make_validate_middleware([Validator(schema={"schedule": int}, source="body")])
+
+@server.POST("/modify", local_middlewares=[modify_tv])
 async def modify_schedule(request: Request) -> Response:
     val = request.body["schedule"]
     add_schedule("daily_balance", val)

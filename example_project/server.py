@@ -1,7 +1,7 @@
 from hango.server import *
 from .db import init_db, add_schedule, scheduler_loop
 import asyncio
-server: Server = app()
+server: Server = app(cache='redis')
 from example_project.handler import *
 import contextlib
 
