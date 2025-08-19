@@ -2,11 +2,20 @@ import json, sys, time
 from hango.utils import redact, milliseconds, request_id
 from hango.custom_http import Request, Response
 SLOW_THRESHOLD = 0.0
+
+
+def _json_dumps_safe(obj):
+    if isinstance(obj, (set, frozenset)):
+        return list(obj)
+    if isinstance(obj, (bytes, bytearray)):
+        return obj.decode("utf-8", errors="replace")
+    return str(obj)
+
 def log(event: str, **fields):
     if "headers" in fields: fields["headers"] = redact(fields["headers"])
     if "body" in fields: fields["body"] = redact(fields["body"])
     record = {"ts": milliseconds(), "event": event, **fields}
-    sys.stdout.write(json.dumps(record, separators=(",", ":")) + "\n")
+    sys.stdout.write(json.dumps(record, separators=(",", ":"), default=_json_dumps_safe) + "\n")
     sys.stdout.flush()
 
 def start_request(request: Request):
