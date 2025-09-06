@@ -60,7 +60,7 @@ def test(request: Request) -> Response:
 
 client = HttpClient(user_agent="test")
 
-def cache_middleware(handler, cache: redis):
+def cache_middleware(handler, cache: "redis.asyncio.Redis"):
     async def wrapped(request):
         # cache is redis
         cache_helper = CacheHelper(cache)
