@@ -8,6 +8,21 @@ from hango.middleware import make_rate_limit_middleware, RateLimiter, make_valid
 from hango.obs import log
 
 
+@server.GET("/helloworld")
+def hello_world(request):
+    return Response(status_code="200", body={"message": "Hello, World!"})
+
+
+
+@server.POST("/login")
+async def login(request: Request):
+    user_id = request.body["user_id"]
+
+    request.session.set("user_id", user_id)
+    
+    return Response(status_code=200, body={"ok": True})
+
+
 @server.set_global_middlewares
 def foo_middleware(handler):
     async def wrapped(request):
