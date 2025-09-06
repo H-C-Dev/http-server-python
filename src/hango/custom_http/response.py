@@ -5,7 +5,7 @@ from hango.utils import response_time
 from typing import Optional, Tuple, Union
 @dataclass
 class ResponseHeaders:
-    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None, hsts: bool = False, hsts_max_age: int = 31536000, is_options: bool = False):
+    def __init__(self, status_code: int, status_message: str, date: str, server: str, content_type: str, content_length: int, connection: str | None = "keep-alive", cors_header: str | None = None, set_cookie: str | None = None, location: str | None = None, hsts: bool = False, hsts_max_age: int = 31536000, is_options: bool = False, duration: float | None = None):
         self.start_line: str = f"HTTP/1.1 {status_code} {status_message}\r\n"
         self.date: str = f"Date: {date}\r\n"
         self.server: str = f"Server: {server}\r\n"
@@ -23,6 +23,7 @@ class ResponseHeaders:
         self.content_type_options: str = "X-Content-Type-Options: nosniff\r\n"
         self.referrer: str = "Referrer-Policy: no-referrer\r\n"
         self.frame_options: str = "X-Frame-Options: DENY\r\n"
+        self.request_duration: str = f"X-Request-Duration-ms: {duration}\r\n" if duration else ""
     
     def return_response_headers(self) -> str:     
         return (
@@ -41,6 +42,7 @@ class ResponseHeaders:
             self.content_type_options +
             self.referrer +
             self.frame_options +
+            self.request_duration +
             "\r\n"
         )
 
@@ -80,7 +82,8 @@ class Response:
             location=self.redirect_to,
             connection="close" if self.redirect_to else None,
             hsts=self._is_https,
-            is_options=self.is_options
+            is_options=self.is_options,
+            duration=self.duration
 
         )
         return headers
