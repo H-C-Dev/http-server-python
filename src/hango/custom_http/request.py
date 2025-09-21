@@ -309,7 +309,7 @@ class HTTPRequestParser:
         if method == "OPTIONS" and is_cors_allowed(headers.origin):
             request = Request(method=method, path=path, version=version, query={}, body={}, headers=headers, query_validated={}, body_validated={}, is_early_hints_supported=False)
             return (request, None, False, None, None, True)
-
+        # redirect http request from non-localhost to https
         if not is_https and not is_localhost:
             request = Request(method, path, version, {}, {}, None, {}, headers, False, params=None, is_localhost=is_localhost, body_fully_read=False)
             return (request, None, False, None, None, True)
