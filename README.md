@@ -1,27 +1,41 @@
 # HTTP/1.1 Backend Framework (Demo)
 
-This repository showcases a simple Python backend framework project, built to demonstrate concepts in backend development, observability, and financial application integration.  
-It highlights core features of modern backend systems without relying on third-party web frameworks.
+This repository contains a **learning-oriented demo project** built in Python.  
+The goal is to explore backend fundamentals such as request handling, middleware, and observability, without relying on third-party web frameworks.
+
+It is **not a production framework**, but rather a sandbox to practice backend development concepts and financial API integration.
+
+---
 
 ## Tech Stack
-- Python
+- Python (standard library only)
+- 
+---
 
-## Key Features
-- Basic request handling and routing  
-- Middleware support for flexible request/response processing  
-- Observability features: JSON logs, trace IDs, latency tracking  
-- Security considerations: CORS handling, session management  
+## Concepts Covered
+- Basic HTTP/1.1 request parsing and routing  
+- Middleware chains for pre/post request processing  
+- Observability basics: JSON logs, trace-IDs, simple latency tracking  
+- Security considerations: CORS handling, session tokens  
+- API client integration with financial services  
 
-## Example Project: Full-Stack Web App (Starling API)
+---
 
-As an example use case, this demo includes a small full-stack application that integrates with the Starling Bank API.  
+## Example Project: Starling Bank API
+To make the demo practical, it includes a small **full-stack example**:
 
-**Stack:** Next.js, Python backend, AWS SNS, Starling Bank API  
+- **Frontend:** Next.js dashboard    
+- **Integration:** Starling Bank API  
 
-**Features:**
-- Fetch account balances from the Starling Bank API  
-- Send daily balance email notifications via AWS SNS  
-- Simple security-focused HTTP client integration  
+---
 
 ## Focus
-This project is a demonstration of backend fundamentals and financial API integration, showing interest in financial systems and regulatory technology.
+This project is meant to:  
+- Illustrate **backend fundamentals** for learners  
+- Show how **observability and security concepts** can be integrated into small projects  
+- Demonstrate interest in **financial systems and regtech**  
+
+---
+
+## Status
+This repo is for **educational purposes only**.  
