@@ -9,7 +9,6 @@ It is **not a production framework**, but rather a sandbox to practice backend d
 
 ## Tech Stack
 - Python (standard library only)
-- 
 ---
 
 ## Concepts Covered
@@ -21,7 +20,7 @@ It is **not a production framework**, but rather a sandbox to practice backend d
 
 ---
 
-## Example Project: Starling Bank API
+## Example Project: UK Online Bank API
 To make the demo practical, it includes a small **full-stack example**:
 
 - **Frontend:** Next.js dashboard    
@@ -39,3 +38,4 @@ This project is meant to:
 
 ## Status
 This repo is for **educational purposes only**.  
+
