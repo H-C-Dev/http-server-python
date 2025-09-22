@@ -1,41 +1,42 @@
-# HTTP/1.1 Backend Framework (Demo)
+# HTTP/1.1 Backend Demo Project
 
-This repository contains a **learning-oriented demo project** built in Python.  
-The goal is to explore backend fundamentals such as request handling, middleware, and observability, without relying on third-party web frameworks.
+This repository contains a small Python demo project designed for learning backend fundamentals.  
+It is a sandbox to experiment with request handling, simple routing, and security basics — without using third-party web frameworks.  
 
-It is **not a production framework**, but rather a sandbox to practice backend development concepts and financial API integration.
+⚠️ This project is **educational only** and not intended for production use.  
 
 ---
 
 ## Tech Stack
 - Python (standard library only)
+
 ---
 
 ## Concepts Covered
 - Basic HTTP/1.1 request parsing and routing  
-- Middleware chains for pre/post request processing  
-- Observability basics: JSON logs, trace-IDs, simple latency tracking  
-- Security considerations: CORS handling, session tokens  
-- API client integration with financial services  
+- Request/response hooks for flexible processing  
+- Simple logging and request identifiers  
+- Basic timing measurements for performance awareness  
+- Cross-origin request handling  
+- Basic session support  
 
 ---
 
-## Example Project: UK Online Bank API
-To make the demo practical, it includes a small **full-stack example**:
+## Example Project: Financial API Integration
+To demonstrate practical use, the demo includes a small full-stack example:
 
-- **Frontend:** Next.js dashboard    
-- **Integration:** Starling Bank API  
+- **Frontend:** Next.js dashboard  
+- **Integration:** external financial API (e.g. account balance fetch)  
 
 ---
 
 ## Focus
-This project is meant to:  
-- Illustrate **backend fundamentals** for learners  
-- Show how **observability and security concepts** can be integrated into small projects  
-- Demonstrate interest in **financial systems and regtech**  
+This demo is meant to:
+- Illustrate backend fundamentals for learners  
+- Show how simple logging and security considerations can be layered into a small project  
+- Demonstrate curiosity about financial systems and regulatory technology  
 
 ---
 
 ## Status
-This repo is for **educational purposes only**.  
-
+Educational sandbox only — not for production deployment.
